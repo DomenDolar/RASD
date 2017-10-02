@@ -1,4 +1,4 @@
-# RASD
+# RapidApplicationServiceDevelopment
 RapidASDev project is Rapid Application Service Development - RASD environment (Oracle, PL/SQL)
 
 In future all code belowe will be put in GIT from various repositories.
@@ -24,13 +24,13 @@ Random
 Check URL status
 BMP
 
- Captcha.prc
- TestCaptcha.prc
- dd_bmp.pck
- dd_check_url_status.pck
- dd_lib.pck
- dd_random.pck
- dd_soap.pck
+ Captcha .prc
+ TestCaptcha .prc
+ dd_bmp .pck
+ dd_check_url_status .pck
+ dd_lib .pck
+ dd_random .pck
+ dd_soap .pck
 
 https://sourceforge.net/p/rasd/code-0/HEAD/tree/trunk/RASD_1.0/Documentation/plsqllib/
 
