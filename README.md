@@ -1,6 +1,11 @@
 # RapidApplicationServiceDevelopment
 RapidASDev project is Rapid Application Service Development - RASD environment (Oracle, PL/SQL)
 
+```diff
+- RASD
+- Rapid Application Service Development for Oracle
+```
+
 WIKI on SourceForge https://sourceforge.net/p/rasd/wiki/Welcome/
 
 HINS & TRICKS: https://sourceforge.net/p/rasd/discussion/
