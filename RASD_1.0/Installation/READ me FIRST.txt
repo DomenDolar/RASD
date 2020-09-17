@@ -1,0 +1,23 @@
+Based on type of instalation use start script.
+
+- 01_createRASD.sql
+- 01_createRASD_docker.sql        - running on dockerized XE database (like alexeiled/docker-oracle-xe-11g)
+- 01_createRASD_oracle_cloud.sql  - running on Autonomous Transaction Processing databace (Oracle Cloud) 
+
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+change start script with your own passwords and allso change default passwords in:
+ - your_app_schema\0.create_your_app_schema.sql
+ - rasd\00.create_schema_rasd.sql
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+ 
+run script with SQLPLUS like:
+
+>sqlplus xx/yy@zz
+SQL>@rasd/01_createRASD.sql
+
+
+More information you have on page:
+https://sourceforge.net/p/rasd/wiki/Installation/

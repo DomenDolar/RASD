@@ -1,0 +1,1 @@
+imp your_app_schema/pass@TNS_NAME file=4.rasd_data_DOCUMENTS_vexp112010.dmp fromuser=USERGENDEV touser=your_app_schema ignore=Y

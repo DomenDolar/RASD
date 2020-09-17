@@ -1,0 +1,62 @@
+RASD
+
+PL/SQL Developer - Preferences - Files - Format - Always ANSI
+Change files at  the end Save without BOM UTF8
+
+DB OBJECTS
+------
+1. Create folder \Installation\rasd
+2. "Export User Objects"
+ - Select all tables, sequences in list
+ - Select "Single file"
+ - Output filename: \Installation\rasd\01.rasd_objects.sql
+ -"Export"
+
+ V datoteko je potrebno dodati:
+-----
+set define off
+SET serveroutput ON
+spool 01.rasd_objects.log
+-- VSEBINA
+spool off
+-----
+ 
+------ 
+DB DATA, APP
+------
+1. Run in test window "prepare installation objects (02.rasd_app_db_data).sql"
+2. Copy result data to 02.rasd_app_db_data.sql
+------ 
+
+your_app_schema
+
+1. Export packages ... to 3.rasd_client_applications.sql
+V datoteko je potrebno dodati
+-----
+set define off
+SET serveroutput ON
+spool 3.rasd_clinet_applications.log
+-- VSEBINA
+spool off
+-----
+2. Export LOB to 4.rasd_client_DOCUMENTS_data.sql (use RASD_EXPORT_DOCUMENTS.sql)
+V datoteko je potrebno dodati
+-----
+set define off
+SET serveroutput ON
+spool 4.rasd_client_DOCUMENTS_data.log
+-- VSEBINA
+spool off
+
+--
+Na koncu še export vseh posameznih paketov v all.sql (file per object spec+body single file)
+--
+
+Last prepared export: 18.9.2020
+
+
+ - ZIP RASD_1.0.yyyymmdd.zip -> from folder RASD_1.0 -->>
+ - All files must be saved without BOM (if they are UTF8)
+ 
+ - commit to SVN -> create comment from rasdversionchanges
+ 

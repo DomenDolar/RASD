@@ -1,0 +1,259 @@
+create or replace package RASDC_ERRORS is
+  /*
+  // +----------------------------------------------------------------------+
+  // | RASD - Rapid Application Service Development                         |
+  // +----------------------------------------------------------------------+
+  // | Copyright (C) 2014       http://rasd.sourceforge.net                 |
+  // +----------------------------------------------------------------------+
+  // | This program is free software; you can redistribute it and/or modify |
+  // | it under the terms of the GNU General Public License as published by |
+  // | the Free Software Foundation; either version 2 of the License, or    |
+  // | (at your option) any later version.                                  |
+  // |                                                                      |
+  // | This program is distributed in the hope that it will be useful       |
+  // | but WITHOUT ANY WARRANTY; without even the implied warranty of       |
+  // | MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the         |
+  // | GNU General Public License for more details.                         |
+  // +----------------------------------------------------------------------+
+  // | Author: Domen Dolar       <domendolar@users.sourceforge.net>         |
+  // +----------------------------------------------------------------------+
+  */
+  function version(p_log out varchar2) return varchar2;
+
+  procedure Program(name_array in owa.vc_arr, value_array in owa.vc_arr);
+end;
+/
+
+create or replace package body RASDC_ERRORS is
+  /*
+  // +----------------------------------------------------------------------+
+  // | RASD - Rapid Application Service Development                         |
+  // +----------------------------------------------------------------------+
+  // | Copyright (C) 2014       http://rasd.sourceforge.net                 |
+  // +----------------------------------------------------------------------+
+  // | This program is free software; you can redistribute it and/or modify |
+  // | it under the terms of the GNU General Public License as published by |
+  // | the Free Software Foundation; either version 2 of the License, or    |
+  // | (at your option) any later version.                                  |
+  // |                                                                      |
+  // | This program is distributed in the hope that it will be useful       |
+  // | but WITHOUT ANY WARRANTY; without even the implied warranty of       |
+  // | MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the         |
+  // | GNU General Public License for more details.                         |
+  // +----------------------------------------------------------------------+
+  // | Author: Domen Dolar       <domendolar@users.sourceforge.net>         |
+  // +----------------------------------------------------------------------+
+  */
+
+  type rtab is table of rowid index by binary_integer;
+  type ntab is table of number index by binary_integer;
+  type dtab is table of date index by binary_integer;
+  type ctab is table of varchar2(4000) index by binary_integer;
+  type itab is table of pls_integer index by binary_integer;
+
+  function version(p_log out varchar2) return varchar2 is
+  begin
+    p_log := '/* Change LOG:
+20141027 - Added footer on all pages
+*/';
+    return 'v.1.1.20141027225530';
+
+  end;
+
+  procedure izpis_kode_napak(p_name in varchar2) is
+  begin
+    for s in (select line, text, name, type
+                from all_source
+               where owner = rasdc_library.currentDADUser
+                 and name = p_name
+               order by type, line) loop
+      if s.type = 'PACKAGE BODY' then
+        htp.prn('</XMP><A name="PB' || s.line || '"></A><XMP>' ||
+                lpad(to_char(s.line), 4, '0') || '   ' ||
+                replace(replace(replace(s.text, '!--', '--'), '<', '<'),
+                        ' ',
+                        ' ') || '');
+      else
+        htp.prn(lpad(to_char(s.line), 4, '0') || '   ' ||
+                replace(replace(s.text, '<', '<'), ' ', ' ') || '');
+      end if;
+      for e in (select line, position, text
+                  from all_errors a
+                 where owner = rasdc_library.currentDADUser
+                   and name = s.name
+                   and type = s.type
+                   and line = s.line
+                 order by position) loop
+        htp.prn('</XMP><FONT COLOR="RED">' || e.line || '/' || e.position || ' ' ||
+                e.text || ' </FONT><BR><XMP>');
+      end loop;
+    end loop;
+  end;
+
+  procedure Program(name_array in owa.vc_arr, value_array in owa.vc_arr) is
+    GBUTTON1   varchar2(4000) := 'Search';
+    GBUTTON2   varchar2(4000) := 'Reset';
+    GBUTTON3   varchar2(4000) := 'Save';
+    PFORMID    number;
+    Pblockid   varchar2(4000);
+    LANG       varchar2(4000);
+    ACTION     varchar2(4000);
+    PPROGRAM   varchar2(4000);
+    B10RS      ctab;
+    B10rid     rtab;
+    B10sqltext ctab;
+    B10source  ctab;
+  
+    procedure on_submit is
+      num_entries number := name_array.count;
+      v_max       pls_integer := 0;
+    begin
+      for i__ in 1 .. nvl(num_entries, 0) loop
+        if 1 = 2 then
+          null;
+        elsif upper(name_array(i__)) = upper('GBUTTON1') then
+          GBUTTON1 := value_array(i__);
+        elsif upper(name_array(i__)) = upper('GBUTTON2') then
+          GBUTTON2 := value_array(i__);
+        elsif upper(name_array(i__)) = upper('GBUTTON3') then
+          GBUTTON3 := value_array(i__);
+        elsif upper(name_array(i__)) = upper('PFORMID') then
+          PFORMID := rasdi_client.varchr2number(value_array(i__));
+        elsif upper(name_array(i__)) = upper('Pblockid') then
+          Pblockid := value_array(i__);
+        elsif upper(name_array(i__)) = upper('LANG') then
+          LANG := value_array(i__);
+        elsif upper(name_array(i__)) = upper('PPROGRAM') then
+          PPROGRAM := value_array(i__);
+        elsif upper(name_array(i__)) = upper('ACTION') then
+          ACTION := value_array(i__);
+        end if;
+      end loop;
+      v_max := 0;
+      if B10RS.count > v_max then
+        v_max := B10RS.count;
+      end if;
+      if B10rid.count > v_max then
+        v_max := B10rid.count;
+      end if;
+      if B10sqltext.count > v_max then
+        v_max := B10sqltext.count;
+      end if;
+      if B10source.count > v_max then
+        v_max := B10source.count;
+      end if;
+      for i__ in 1 .. v_max loop
+        if not B10RS.exists(i__) then
+          B10RS(i__) := null;
+        end if;
+        if not B10rid.exists(i__) then
+          B10rid(i__) := null;
+        end if;
+        if not B10sqltext.exists(i__) then
+          B10sqltext(i__) := null;
+        end if;
+        if not B10source.exists(i__) then
+          B10source(i__) := null;
+        end if;
+        null;
+      end loop;
+    end;
+  
+    procedure phtml is
+      --povezavein
+      --SQL
+      --TEXT
+      --TF
+      --SQL-T
+    begin
+      --js povezavein
+      --js SQL
+      --js TEXT
+      --js TF
+      htp.prn('<HTML>
+<HEAD>
+<META HTTP-EQUIV="Content-Type" CONTENT="text/html;CHARSET=WINDOWS-1250">
+<META HTTP-EQUIV="Pragma" CONTENT="no-cache"><META HTTP-EQUIV="Expires" CONTENT="-1">
+'||RASDC_LIBRARY.RASD_UI_Libs||'
+<SCRIPT LANGUAGE="Javascript1.2">
+function onResize() {
+  resizeTA(document.RASDC_SQL.B10sqltext_1);
+}
+function onLoad() {
+  onResize();
+}
+</SCRIPT>
+</HEAD>
+<BODY  onload="onLoad();" onresize="onResize();">
+<DIV class="hint">
+<FONT ID="RASDC_SQL_LAB"></FONT>
+<FORM NAME="RASDC_ERRORS" METHOD="post" ACTION="!rasdc_errors.program">
+<INPUT NAME="PFORMID" TYPE="HIDDEN" VALUE="' || PFORMID ||
+              '" CLASS="HIDDEN">
+<INPUT NAME="Pblockid" TYPE="HIDDEN" VALUE="' || Pblockid ||
+              '" CLASS="HIDDEN">
+<INPUT NAME="LANG" TYPE="HIDDEN" VALUE="' || LANG || '" CLASS="HIDDEN">
+<FONT style="font-family: Arial, Helvetica, sans-serif;">
+<XMP>');
+      izpis_kode_napak(PPROGRAM);
+      htp.p('</XMP>
+ </FORM>
+<SCRIPT LANGUAGE="JavaScript">
+ izpis_dna('''||rasdi_client.c_registerto||''');
+</SCRIPT> </BODY> </HTML>
+    ');
+    exception
+      when others then
+        htp.p('<font color="red">' ||
+              replace(replace(sqlerrm,
+                              '
+',
+                              '\n'),
+                      '"',
+                      '\"') || '</font>');
+        htp.p('<script language="JavaScript">');
+        htp.p('<!--');
+        htp.p('  alert("' || replace(replace(sqlerrm,
+                                             '
+',
+                                             '\n'),
+                                     '"',
+                                     '\"') || '");');
+        htp.p('history.go(-1);');
+        htp.p('// -->');
+        htp.p('</script>');
+      
+        null;
+    end;
+  begin
+    --<ON_ACTION formid="101" blockid="">
+    declare
+      vup    varchar2(30) := rasdi_client.secGetUsername;
+      v_form varchar2(100);
+    begin
+      rasdi_client.secCheckPermission('RASDC_ERRORS', '');
+      on_submit;
+    
+      phtml;
+    end;
+    --</ON_ACTION>
+  exception
+    when rasdi_client.e_finished then
+      null;
+    when others then
+      htp.p('<script language="JavaScript">');
+      htp.p('<!--');
+      htp.p('  alert("' || replace(replace(sqlerrm,
+                                           '
+',
+                                           '\n'),
+                                   '"',
+                                   '\"') || '");');
+      htp.p('history.go(-1);');
+      htp.p('// -->');
+      htp.p('</script>');
+    
+  end;
+end;
+/
+

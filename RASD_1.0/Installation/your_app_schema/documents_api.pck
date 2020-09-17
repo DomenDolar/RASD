@@ -1,0 +1,626 @@
+create or replace package DOCUMENTS_API is
+/*
+// +----------------------------------------------------------------------+
+// | RASD - Rapid Application Service Development                         |
+//   Program: DOCUMENTS_API generated on 08.01.20 by user RASDCLI.     
+// +----------------------------------------------------------------------+
+// | http://rasd.sourceforge.net                                          |
+// +----------------------------------------------------------------------+
+// | This program is generated form RASD version 1.                       |
+// +----------------------------------------------------------------------+
+*/    
+function version return varchar2;
+function metadata return clob;
+procedure metadata;
+procedure webclient(
+  name_array  in owa.vc_arr,
+  value_array in owa.vc_arr
+  );
+procedure main(
+  name_array  in owa.vc_arr,
+  value_array in owa.vc_arr
+  );
+procedure rest(
+  name_array  in owa.vc_arr,
+  value_array in owa.vc_arr
+  );
+procedure rlog(v_clob clob);
+procedure form_js(
+  name_array  in owa.vc_arr,
+  value_array in owa.vc_arr
+  );
+procedure form_css(
+  name_array  in owa.vc_arr,
+  value_array in owa.vc_arr
+  );
+/*---------------------------------------------------------------------------------------------------*/
+/*---------------------------------------------------------------------------------------------------*/
+/*---------------------------------------------------------------------------------------------------*/
+/*---------------------------------------------------------------------------------------------------*/
+
+PROCEDURE upload;
+PROCEDURE upload (file  IN  VARCHAR2);
+PROCEDURE unzip (file varchar2);
+PROCEDURE download;
+PROCEDURE download_direct (file  IN  VARCHAR2);
+function Blob2Clob(B BLOB) 
+return clob;
+FUNCTION Clob2Blob( c IN CLOB ) RETURN BLOB;
+FUNCTION get_document (file  IN  VARCHAR2) return blob;
+
+/*---------------------------------------------------------------------------------------------------*/
+/*---------------------------------------------------------------------------------------------------*/
+/*---------------------------------------------------------------------------------------------------*/
+/*---------------------------------------------------------------------------------------------------*/
+
+end;
+/
+
+create or replace package body DOCUMENTS_API is
+/*
+// +----------------------------------------------------------------------+
+// | RASD - Rapid Application Service Development                         |
+//   Program: DOCUMENTS_API generated on 08.01.20 by user RASDCLI.    
+// +----------------------------------------------------------------------+
+// | http://rasd.sourceforge.net                                          |
+// +----------------------------------------------------------------------+
+// | This program is generated form RASD version 1.                       |
+// +----------------------------------------------------------------------+
+*/    
+  type rtab is table of rowid          index by binary_integer;
+  type ntab is table of number         index by binary_integer;
+  type dtab is table of date           index by binary_integer;
+  type ttab is table of timestamp      index by binary_integer;
+  type ctab is table of varchar2(4000) index by binary_integer;
+  type cctab is table of clob index by binary_integer;
+  type itab is table of pls_integer    index by binary_integer;
+  type set_type is record
+  (
+    visible boolean default true,
+    readonly boolean default false,
+    disabled boolean default false,
+    required boolean default false,
+    error varchar2(4000) ,
+    info varchar2(4000) ,
+    custom   varchar2(256)
+  );
+  type stab is table of set_type index by binary_integer;
+  log__ clob := '';
+  set_session_block__ clob := '';
+  TYPE LOVrec__ IS RECORD (label varchar2(4000),id varchar2(4000) );
+  TYPE LOVtab__ IS TABLE OF LOVrec__ INDEX BY BINARY_INTEGER;
+  LOV__ LOVtab__;
+  RESTRESTYPE varchar2(4000);
+  ACTION                        varchar2(4000);
+  ERROR                         varchar2(4000);
+  MESSAGE                       varchar2(4000);
+  WARNING                       varchar2(4000);
+/*---------------------------------------------------------------------------------------------------*/
+/*---------------------------------------------------------------------------------------------------*/
+/*---------------------------------------------------------------------------------------------------*/
+/*---------------------------------------------------------------------------------------------------*/
+
+-- ----------------------------------------------------------------------------
+PROCEDURE unzip (file varchar2) AS
+-- ----------------------------------------------------------------------------
+  v_blob blob;
+  v_blob1 blob;
+  zip_files as_zip.file_list := null;
+begin
+
+  HTP.htmlopen;
+  HTP.headopen;
+  HTP.title('Unzip file '||file);
+  HTP.headclose;
+  HTP.bodyopen;
+
+  HTP.br;
+  HTP.print('Unzip file '||file);
+  HTP.br;
+
+  select blob_content into v_blob from documents where name = file;
+  delete from documents where name like file||'/%';
+
+  zip_files := as_zip.get_file_list( v_blob );
+
+  for i in zip_files.first() .. zip_files.last()
+  loop
+    HTP.anchor('docs/' ||file||'/'||zip_files( i ), 'docs/' || file||'/'||zip_files( i ));
+    HTP.br;
+    v_blob1 :=  as_zip.get_file( v_blob , zip_files( i ) );
+    insert into documents (name , doc_size ,last_updated, content_type , blob_content)
+    values (file||'/'||zip_files( i ), length(v_blob1), sysdate, 'BLOB' , v_blob1);
+  end loop;
+
+  HTP.bodyclose;
+  HTP.htmlclose;
+end;
+-- ----------------------------------------------------------------------------
+PROCEDURE upload AS
+-- ----------------------------------------------------------------------------
+  l_real_name  VARCHAR2(1000);
+BEGIN
+  HTP.htmlopen;
+  HTP.headopen;
+  HTP.title('Test Upload');
+  HTP.headclose;
+  HTP.bodyopen;
+  HTP.header(1, 'Test Upload');
+  HTP.print('<form enctype="multipart/form-data" action="documents_api.upload" method="post">');
+  HTP.print('  File to upload: <input type="file" name="file"><br />');
+  HTP.print('  <input type="submit" value="Upload">');
+  HTP.print('</form>');
+  HTP.bodyclose;
+  HTP.htmlclose;
+END upload;
+-- ----------------------------------------------------------------------------
+-- ----------------------------------------------------------------------------
+PROCEDURE upload (file  IN  VARCHAR2) AS
+-- ----------------------------------------------------------------------------
+  l_real_name  VARCHAR2(1000);
+BEGIN
+  HTP.htmlopen;
+  HTP.headopen;
+  HTP.title('File Uploaded');
+  HTP.headclose;
+  HTP.bodyopen;
+  HTP.header(1, 'Upload Status');
+  l_real_name := SUBSTR(file, INSTR(file, '/') + 1);
+  BEGIN
+    -- Delete any existing document to allow update.
+    DELETE FROM documents
+    WHERE  name = l_real_name;
+    -- Update the prefixed name with the real file name.
+    UPDATE documents
+    SET    name = l_real_name
+    WHERE  name = file;
+    HTP.print('Uploaded ' || l_real_name || ' successfully.');
+
+  EXCEPTION
+    WHEN OTHERS THEN
+      HTP.print('Upload of ' || l_real_name || ' failed.');
+      HTP.print(SQLERRM);
+  END;
+  HTP.br;
+  -- Create some links to demonstrate URL downloads.
+  HTP.br;
+  HTP.print('URL Downloads:');
+  HTP.br;
+  FOR cur_rec IN (SELECT name FROM documents) LOOP
+    HTP.anchor('docs/' || cur_rec.name, 'docs/' || cur_rec.name);
+    if instr( upper(cur_rec.name) , '.ZIP') > 0 and instr( upper(cur_rec.name) , '.ZIP/') = 0  then
+    HTP.anchor('documents_api.unzip?file=' || cur_rec.name, 'unzip');
+    end if;
+    HTP.br;
+  END LOOP;
+  -- Create some links to demonstrate direct downloads.
+  HTP.br;
+  HTP.print('Direct Downloads:');
+  HTP.br;
+  FOR cur_rec IN (SELECT name FROM documents) LOOP
+    HTP.anchor('documents_api.download_direct?file=' || cur_rec.name, 'document_api.download_direct?file=' || cur_rec.name);
+    HTP.br;
+  END LOOP;
+  HTP.bodyclose;
+  HTP.htmlclose;
+END;
+-- ----------------------------------------------------------------------------
+-- ----------------------------------------------------------------------------
+PROCEDURE download IS
+-- ----------------------------------------------------------------------------
+  l_filename  VARCHAR2(255);
+BEGIN
+  l_filename := SUBSTR(OWA_UTIL.get_cgi_env('PATH_INFO'), 2);
+  WPG_DOCLOAD.download_file(l_filename);
+EXCEPTION
+  WHEN OTHERS THEN
+    HTP.htmlopen;
+    HTP.headopen;
+    HTP.title('File Downloaded');
+    HTP.headclose;
+    HTP.bodyopen;
+    HTP.header(1, 'Download Status');
+    HTP.print('Download of ' || l_filename || ' failed.');
+    HTP.print(SQLERRM);
+    HTP.bodyclose;
+    HTP.htmlclose;
+END download;
+-- ----------------------------------------------------------------------------
+-- ----------------------------------------------------------------------------
+PROCEDURE download_direct (file  IN  VARCHAR2) AS
+-- ----------------------------------------------------------------------------
+  l_blob_content  documents.blob_content%TYPE;
+  l_mime_type     documents.mime_type%TYPE;
+BEGIN
+  SELECT blob_content,
+         mime_type
+  INTO   l_blob_content,
+         l_mime_type
+  FROM   documents
+  WHERE  name = file;
+  OWA_UTIL.mime_header(l_mime_type, FALSE);
+  HTP.p('Content-Length: ' || DBMS_LOB.getlength(l_blob_content));
+  OWA_UTIL.http_header_close;
+  WPG_DOCLOAD.download_file(l_blob_content);
+EXCEPTION
+  WHEN OTHERS THEN
+    HTP.htmlopen;
+    HTP.headopen;
+    HTP.title('File Downloaded');
+    HTP.headclose;
+    HTP.bodyopen;
+    HTP.header(1, 'Download Status');
+    HTP.print('file='||file);
+    HTP.print(SQLERRM);
+    HTP.bodyclose;
+    HTP.htmlclose;
+END download_direct;
+
+function Blob2Clob(B BLOB) 
+return clob is 
+c clob;
+n number;
+v varchar2(32767 CHAR); 
+begin 
+if (b is null) then 
+return null;
+end if;
+if (length(b)=0) then
+return empty_clob(); 
+end if;
+dbms_lob.createtemporary(c,true);
+n:=1;
+
+while (n+32767<=length(b)) loop
+dbms_lob.writeappend(c,32767,utl_raw.cast_to_varchar2(dbms_lob.substr(b,32767,n)));
+
+n:=n+32767;
+end loop;
+v := utl_raw.cast_to_varchar2(dbms_lob.substr(b,length(b)-n+1,n));
+
+dbms_lob.writeappend(c,length(v),v);
+return c;
+end;
+
+
+FUNCTION Clob2Blob( c IN CLOB ) RETURN BLOB
+-- typecasts CLOB to BLOB (binary conversion)
+IS
+pos PLS_INTEGER := 1;
+buffer RAW( 32767 );
+res BLOB;
+lob_len PLS_INTEGER := DBMS_LOB.getLength( c );
+BEGIN
+DBMS_LOB.createTemporary( res, TRUE );
+DBMS_LOB.OPEN( res, DBMS_LOB.LOB_ReadWrite );
+
+LOOP
+buffer := UTL_RAW.cast_to_raw( DBMS_LOB.SUBSTR( c, 16000, pos ) );
+
+IF UTL_RAW.LENGTH( buffer ) > 0 THEN
+DBMS_LOB.writeAppend( res, UTL_RAW.LENGTH( buffer ), buffer );
+END IF;
+
+pos := pos + 16000;
+EXIT WHEN pos > lob_len;
+END LOOP;
+
+RETURN res; -- res is OPEN here
+END;
+-- ----------------------------------------------------------------------------
+FUNCTION get_document (file  IN  VARCHAR2) return blob AS
+-- ----------------------------------------------------------------------------
+  l_blob_content  documents.blob_content%TYPE;
+  l_mime_type     documents.mime_type%TYPE;
+BEGIN
+  SELECT blob_content,
+         mime_type
+  INTO   l_blob_content,
+         l_mime_type
+  FROM   documents
+  WHERE  name = file;
+
+  return l_blob_content;
+EXCEPTION
+  WHEN OTHERS THEN
+  return l_blob_content;
+END ;
+-- ----------------------------------------------------------------------------
+
+
+/*---------------------------------------------------------------------------------------------------*/
+/*---------------------------------------------------------------------------------------------------*/
+/*---------------------------------------------------------------------------------------------------*/
+/*---------------------------------------------------------------------------------------------------*/
+
+     procedure htpClob(v_clob clob) is
+        i number := 0;
+        v clob := v_clob;
+       begin
+       while length(v) > 0 and i < 100000 loop
+        htp.prn(substr(v,1,10000));
+        i := i + 1;
+        v := substr(v,10001);
+       end loop; 
+       end; 
+     procedure rlog(v_clob clob) is
+       begin
+        log__ := log__ ||systimestamp||':'||v_clob||'<br/>';
+        rasd_client.callLog('24','||v_clob||', systimestamp, '' );
+       end; 
+procedure pLog is begin htpClob('<div class="debug">'||log__||'</div>'); end;
+     function FORM_UIHEAD return clob is
+       begin
+        return  '
+
+';
+       end; 
+     function form_js return clob is
+       begin
+        return  '
+$(function() {
+
+  addSpinner();
+//   initRowStatus();
+//   transformVerticalTable("B15_TABLE", 4 );
+//   setShowHideDiv("BLOCK_NAME_DIV", true);
+//   CheckFieldValue(pid , pname)
+//   CheckFieldMandatory(pid , pname)
+ });
+        ';
+       end; 
+     function form_css return clob is
+       begin
+        return '
+
+        ';
+       end; 
+procedure form_js(
+  name_array  in owa.vc_arr,
+  value_array in owa.vc_arr
+) is begin htpClob(form_js); end;
+procedure form_css(
+  name_array  in owa.vc_arr,
+  value_array in owa.vc_arr
+  ) is begin htpClob(form_css); end;
+  function version return varchar2 is
+  begin
+   return 'v.1.1.20200108111727'; 
+  end;
+  procedure on_session is
+    i__ pls_integer := 1;
+  begin
+  if ACTION is not null then 
+set_session_block__ := set_session_block__ || 'begin ';
+set_session_block__ := set_session_block__ || 'rasd_client.sessionStart;';
+set_session_block__ := set_session_block__ || ' rasd_client.sessionClose;';
+set_session_block__ := set_session_block__ || 'exception when others then null; end;';
+  else 
+ rasd_client.sessionStart;
+declare vc varchar2(2000); begin
+null;
+exception when others then  null; end;    rasd_client.sessionClose;  end if;
+  end;
+  procedure on_submit(name_array  in owa.vc_arr, value_array in owa.vc_arr) is
+    num_entries number := name_array.count;
+    v_max  pls_integer := 0;
+  begin
+-- submit fields
+    for i__ in 1..nvl(num_entries,0) loop
+      if 1 = 2 then null;
+      elsif  upper(name_array(i__)) = 'RESTRESTYPE' then RESTRESTYPE := value_array(i__);
+      elsif  upper(name_array(i__)) = upper('ACTION') then ACTION := value_array(i__);
+      elsif  upper(name_array(i__)) = upper('ERROR') then ERROR := value_array(i__);
+      elsif  upper(name_array(i__)) = upper('MESSAGE') then MESSAGE := value_array(i__);
+      elsif  upper(name_array(i__)) = upper('WARNING') then WARNING := value_array(i__);
+      end if;
+    end loop;
+-- organize records
+-- init fields
+  end;
+  procedure post_submit is
+  begin
+
+    null;
+  end;
+  procedure psubmit(name_array  in owa.vc_arr, value_array in owa.vc_arr) is
+  begin
+-- Reading post variables into fields.
+    on_submit(name_array ,value_array); on_session;
+    post_submit;
+  end;
+  procedure pclear_form is
+  begin
+    ERROR := null;
+    MESSAGE := null;
+    WARNING := null;
+  null; end;
+  procedure pclear is
+  begin
+-- Clears all fields on form and blocks.
+    pclear_form;
+
+  null;
+  end;
+  procedure pselect is
+  begin
+  null;
+ end;
+  procedure pcommit is
+  begin
+
+
+  null; 
+  end;
+  procedure poutput is
+  function ShowFieldERROR return boolean is 
+  begin 
+    return true;
+  end; 
+  function ShowFieldMESSAGE return boolean is 
+  begin 
+    return true;
+  end; 
+  function ShowFieldWARNING return boolean is 
+  begin 
+    return true;
+  end; 
+  begin
+if set_session_block__ is not null then  execute immediate set_session_block__;  end if;
+    htp.p('<script language="JavaScript">');
+    htp.p('function cMF() {');
+    htp.p('var i = 0;');
+    htp.p('if (i > 0) { return false; } else { return true; }');
+    htp.p('}');
+    htp.p('</script>');
+    htp.prn('<html>
+<head>');  htpClob(rasd_client.getHtmlJSLibrary('HEAD','DOCUMENTS API Library')); htpClob(FORM_UIHEAD); htp.p('<style type="text/css">'); htpClob(FORM_CSS); htp.p('</style><script type="text/javascript">'); htpClob(FORM_JS); htp.p('</script>');  
+htp.prn('</head>
+<body><div id="DOCUMENTS_API_LAB" class="rasdFormLab">DOCUMENTS API Library '|| rasd_client.getHtmlDataTable('DOCUMENTS_API_LAB') ||'     </div><div id="DOCUMENTS_API_MENU" class="rasdFormMenu">'|| rasd_client.getHtmlMenuList('DOCUMENTS_API_MENU') ||'     </div>
+<form name="DOCUMENTS_API" method="post" action="!documents_api.webclient"><div id="DOCUMENTS_API_DIV" class="rasdForm"><div id="DOCUMENTS_API_HEAD" class="rasdFormHead"><input name="ACTION" id="ACTION_RASD" type="hidden" value="'||ACTION||'"/>
+</div><div id="DOCUMENTS_API_BODY" class="rasdFormBody"></div><div id="DOCUMENTS_API_ERROR" class="rasdFormMessage error"><font id="ERROR_RASD" class="rasdFont">'||ERROR||'</font></div><div id="DOCUMENTS_API_WARNING" class="rasdFormMessage warning"><font id="WARNING_RASD" class="rasdFont">'||WARNING||'</font></div><div id="DOCUMENTS_API_MESSAGE" class="rasdFormMessage"><font id="MESSAGE_RASD" class="rasdFont">'||MESSAGE||'</font></div><div id="DOCUMENTS_API_FOOTER" class="rasdFormFooter">'|| rasd_client.getHtmlFooter(version , substr('DOCUMENTS_API_FOOTER',1,instr('DOCUMENTS_API_FOOTER', '_',-1)-1) , '') ||'</div></div></form></body></html>
+    ');
+  null; end;
+  procedure poutputrest is
+    v_firstrow__ boolean;
+    function escapeRest(v_str varchar2) return varchar2 is 
+    begin
+      return replace(v_str,'"','&quot;');
+    end;
+    function escapeRest(v_str clob) return clob is 
+    begin
+      return replace(v_str,'"','&quot;');
+    end;
+  begin
+if set_session_block__ is not null then  execute immediate set_session_block__;  end if;
+if RESTRESTYPE = 'XML' then
+    htp.p('<?xml version="1.0" encoding="UTF-8"?>'); 
+    htp.p('<form name="DOCUMENTS_API" version="1">'); 
+    htp.p('<formfields>'); 
+    htp.p('<action><![CDATA['||ACTION||']]></action>'); 
+    htp.p('<error><![CDATA['||ERROR||']]></error>'); 
+    htp.p('<message><![CDATA['||MESSAGE||']]></message>'); 
+    htp.p('<warning><![CDATA['||WARNING||']]></warning>'); 
+    htp.p('</formfields>'); 
+    htp.p('</form>'); 
+else
+    htp.p('{"form":{"@name":"DOCUMENTS_API","@version":"1",' ); 
+    htp.p('"formfields": {'); 
+    htp.p('"action":"'||escapeRest(ACTION)||'"'); 
+    htp.p(',"error":"'||escapeRest(ERROR)||'"'); 
+    htp.p(',"message":"'||escapeRest(MESSAGE)||'"'); 
+    htp.p(',"warning":"'||escapeRest(WARNING)||'"'); 
+    htp.p('},'); 
+    htp.p('}}'); 
+end if;
+  null; end;
+procedure webclient(
+  name_array  in owa.vc_arr,
+  value_array in owa.vc_arr
+) is
+begin  
+  rasd_client.secCheckCredentials(  name_array , value_array ); 
+
+  -- The program execution sequence based on  ACTION defined.
+  psubmit(name_array ,value_array);
+  rasd_client.secCheckPermission('DOCUMENTS_API',ACTION);  
+  if ACTION is null then null;
+    pselect;
+    poutput;
+  end if;
+
+  -- The execution after default execution based on  ACTION.
+  if  ACTION is not null then 
+    raise_application_error('-20000', 'ACTION="'||ACTION||'" is not defined. Define it in POST_ACTION trigger.');
+  end if;
+
+    pLog;
+exception
+  when rasd_client.e_finished then pLog;
+  when others then
+    htp.prn('<html>
+<head>');  htpClob(rasd_client.getHtmlJSLibrary('HEAD','DOCUMENTS API Library')); htpClob(FORM_UIHEAD); htp.p('<style type="text/css">'); htpClob(FORM_CSS); htp.p('</style><script type="text/javascript">'); htpClob(FORM_JS); htp.p('</script>');  
+htp.prn('</head><body><div id="DOCUMENTS_API_LAB" class="rasdFormLab">DOCUMENTS API Library '|| rasd_client.getHtmlDataTable('DOCUMENTS_API_LAB') ||'     </div><div class="rasdForm"><div class="rasdFormHead"><input onclick="history.go(-1);" type="button" value="Back" class="rasdButton"></div><div class="rasdHtmlError">  <div class="rasdHtmlErrorCode">'||sqlcode||'</div>  <div class="rasdHtmlErrorText">'||sqlerrm||'</div></div><div class="rasdFormFooter"><input onclick="history.go(-1);" type="button" value="Back" class="rasdButton">'|| rasd_client.getHtmlFooter(version , substr('DOCUMENTS_API_FOOTER',1,instr('DOCUMENTS_API_FOOTER', '_',-1)-1) , '') ||'</div></div></body></html>    ');
+    pLog;
+end; 
+procedure main(
+  name_array  in owa.vc_arr,
+  value_array in owa.vc_arr
+) is
+begin  
+  rasd_client.secCheckCredentials(  name_array , value_array ); 
+
+  -- The program execution sequence based on  ACTION defined.
+  psubmit(name_array ,value_array);
+  rasd_client.secCheckPermission('DOCUMENTS_API',ACTION);  
+
+  -- The execution after default execution based on  ACTION.
+  if  ACTION is not null then 
+    raise_application_error('-20000', 'ACTION="'||ACTION||'" is not defined. Define it in POST_ACTION trigger.');
+    poutput;
+  end if;
+
+-- Error handler for the main program.
+ exception
+  when rasd_client.e_finished then null;
+
+end; 
+procedure rest(
+  name_array  in owa.vc_arr,
+  value_array in owa.vc_arr
+) is
+begin  
+  rasd_client.secCheckCredentials(  name_array , value_array ); 
+
+  -- The program execution sequence based on  ACTION defined.
+  psubmit(name_array ,value_array);
+  rasd_client.secCheckPermission('DOCUMENTS_API',ACTION);  
+  if ACTION is null then null;
+    pselect;
+    poutputrest;
+  end if;
+
+  -- The execution after default execution based on  ACTION.
+  if  ACTION is not null then 
+    raise_application_error('-20000', 'ACTION="'||ACTION||'" is not defined. Define it in POST_ACTION trigger.');
+  end if;
+
+-- Error handler for the rest program.
+ exception
+  when rasd_client.e_finished then null;
+  when others then
+if RESTRESTYPE = 'XML' then
+    htp.p('<?xml version="1.0" encoding="UTF-8"?>
+<form name="DOCUMENTS_API" version="1">');     htp.p('<error>');     htp.p('  <errorcode>'||sqlcode||'</errorcode>');     htp.p('  <errormessage>'||sqlerrm||'</errormessage>');     htp.p('</error>');     htp.p('</form>'); else
+    htp.p('{"form":{"@name":"DOCUMENTS_API","@version":"1",' );     htp.p('"error":{');     htp.p('  "errorcode":"'||sqlcode||'",');     htp.p('  "errormessage":"'||sqlerrm||'"');     htp.p('}');     htp.p('}}'); end if;
+
+end; 
+function metadata_xml return cctab is
+  v_clob clob := '';
+  v_vc cctab;
+  begin
+ v_vc(1) := '<form><formid>24</formid><form>DOCUMENTS_API</form><version>1</version><change>08.01.2020 11/17/27</change><user>RASDCLI</user><label><![CDATA[DOCUMENTS API Library]]></label><lobid>RASD</lobid><program>!documents_api.webclient</program><referenceyn>N</referenceyn><autodeletehtmlyn>Y</autodeletehtmlyn><autocreaterestyn>Y</autocreaterestyn><autocreatebatchyn>Y</autocreatebatchyn><addmetadatainfoyn>N</addmetadatainfoyn><compiler><engineid>11</engineid><server>rasd_engine11</server><client>rasd_enginehtml11</client><library>rasd_client</library></compiler><compiledInfo><info><engineid>11</engineid><change>19.12.2017 12/45/45</change><compileyn>N</compileyn><application>RASD lib&apos;s</application><owner>rasd</owner><editor>rasd</editor></info></compiledInfo><blocks></blocks><fields></fields><links></links><pages></pages><triggers></triggers><elements></elements></form>';
+     return v_vc;
+  end;
+function metadata return clob is
+  v_clob clob := '';
+  v_vc cctab;
+  begin
+     v_vc := metadata_xml;
+     for i in 1..v_vc.count loop
+       v_clob := v_clob || v_vc(i);
+     end loop;
+     return v_clob;
+  end;
+procedure metadata is
+  v_clob clob := '';
+  v_vc cctab;
+  begin
+     v_vc := metadata_xml;
+     for i in 1..v_vc.count loop
+       htp.prn(v_vc(i));
+     end loop;
+  end;
+end DOCUMENTS_API;
+/
+

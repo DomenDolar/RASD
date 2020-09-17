@@ -1,0 +1,202 @@
+Creating Docker for RASD
+
+
+----------------------------
+File system on local machine
+----------------------------
+---
+0. Prepare all download's to create RASD Docker container
+---
+
+  1. Download latest version of RASD and unzip it to one folder
+     https://sourceforge.net/projects/rasd/files/?source=navbar
+
+--
+>mkdir c:/RASDDWNLD  -> unzip the RASD version
+--	 
+
+  2. Download JAVA jre-8u151-linux-x64.tar.gz to the folder
+     http://www.oracle.com/technetwork/java/javase/downloads/java-archive-javase8-2177648.html
+	 
+--
+>mkdir C:/dockeru01 -> copy file to this folder
+--
+
+  3. Prepare ORDS to import it in Docker container
+--
+>mkdir C:/dockeru01/ords/conf and unzip file  C:\RASDDWNLD\RASD_1.0\Installation\ords\config_ords.zip in conf folder
+>mkdir C:/dockeru01/ords      and copy folder C:\RASDDWNLD\RASD_1.0\Installation\ords\ords.3.0.12.263.15.32
+--
+
+change file C:\dockeru01\ords\conf\ords\defaults.xml
+--
+<entry key="misc.defaultPage">!welcome.webclient</entry>
+<entry key="error.externalPath">/u01/ords/conf/ords/error-pages</entry>
+--
+
+change file C:\dockeru01\ords\conf\ords\standalone\standalone.properties
+--
+standalone.doc.root=\\u01\\ords\\conf\\ords\\standalone\\doc_root
+--
+
+change file C:\dockeru01\ords\ords.3.0.12.263.15.32\params\ords_params.properties
+--
+db.hostname=
+db.port=
+db.servicename=
+db.sid=
+db.username=APEX_PUBLIC_USER
+migrate.apex.rest=false
+rest.services.apex.add=
+rest.services.ords.add=true
+schema.tablespace.default=SYSAUX
+schema.tablespace.temp=TEMP
+standalone.http.port=88
+standalone.use.https=false
+user.tablespace.default=USERS
+user.tablespace.temp=TEMP
+--
+
+
+----------------------------
+DOCKER (Kitmatic) envionment
+----------------------------
+  -. Set sharing C:\ to Docker -> Reset credentials and then Apply
+     https://rominirani.com/docker-on-windows-mounting-host-directories-d96f3f056a2c
+
+  -. Pull empty docker with oracle DB
+     https://hub.docker.com/r/alexeiled/docker-oracle-xe-11g/
+
+--
+>docker pull alexeiled/docker-oracle-xe-11g
+--	 
+
+
+---
+1. Run downloaded Docker
+---
+--
+>docker run -d --shm-size=1g -p 8080:8080 -p 1521:1521 -v c:/dockeru01:/data alexeiled/docker-oracle-xe-11g
+-- 
+
+
+----------------------------
+local envionment
+----------------------------
+---
+2. Create RASD in Docker database. Connect to XE database in docker from local machine
+---
+in your local TNS file (oracle client) check:
+XE  = (description=
+              (address=(protocol=tcp)(port=1521)(host=localhost)))
+              (connect_data=(service=XE))
+          )
+run SQLPLUS from the root folder of unziped RASD application (https://sourceforge.net/p/rasd/wiki/this%20script/)
+--
+cmd
+>cd RASDDWNLD\RASD_1.0\Installation
+//pwd will expired in 7days so we need to rechange it
+>sqlplus SYSTEM/oracle@XE
+>alter user SYSTEM identified by oracle;
+>exit
+//run RASD script
+>sqlplus SYSTEM/oracle@XE @01_createRASD_docker.sql
+>exit
+--
+
+
+----------------------------
+DOCKER envionment - DOCKER CLI
+----------------------------
+---
+3. Setting ORDS (Oracle REST Database Services) in Docker to create http acces to RASD application
+---
+
+  1. Set Docker ...
+>docker ps
+>docker exec -ti conteinerid_of_your_running_docker /bin/bash
+// in Docker you set ...
+--
+>cd u01
+>mkdir jre1.8.0_151
+>mkdir ords
+>cd ords
+>rm -r *
+>mkdir conf
+>mkdir ords.3.0.12.263.15.32
+>cp -R /data/ords/ords.3.0.12.263.15.32/* /u01/ords/ords.3.0.12.263.15.32
+>cp -R /data/ords/conf/* /u01/ords/conf
+>cp  /data/jre-8u151-linux-x64.tar.gz /u01
+>cd ..
+>tar xvzf jre-8u151-linux-x64.tar.gz
+>rm jre-8u151-linux-x64.tar.gz
+--
+
+ 2. Set ORDS config location settings
+
+--
+>export PATH=$PATH:/u01/jre1.8.0_151/bin
+>java -Duser.timezone="+2:00" -jar /u01/ords/ords.3.0.12.263.15.32/ords.war configdir /u01/ords/conf/
+-- 
+ 
+ 3. Add code to start.sh after echo "Oracle started successfully!"
+
+> vi start.sh
+--Copy text at the end of file--   use J to down, I insert text, ESC+wq save data
+export PATH=$PATH:/u01/jre1.8.0_151/bin
+java -Duser.timezone="+2:00" -jar /u01/ords/ords.3.0.12.263.15.32/ords.war standalone &
+
+echo "ORDS started"
+
+cron
+echo "Cron active"
+--
+
+ 4. Add cron to restart database daily
+
+cretae file oracle-xe in /etc/cron.daily and go to dir /etc/cron.daily
+>vi oracle-xe
+--copy text--
+#/bin/sh
+
+/etc/init.d/oracle-xe restart
+
+export PATH=$PATH:/u01/jre1.8.0_151/bin
+java -Duser.timezone="+2:00" -jar /u01/ords/ords.3.0.12.263.15.32/ords.war standalone &
+--
+
+add permissions
+>chmod 777 oracle-xe
+
+run crontab
+>crontab -e
+--copy text--
+10 7 * * * /etc/cron.daily/oracle-xe
+--
+
+run cron
+>cron
+
+
+> exit
+---		  
+4. Finish the docker imageid
+---
+
+--
+>docker ps
+>docker commit conteinerid
+>docker images
+>docker tag imageid domendolar/rasd 		  
+--		  
+5. Push docker to dockerhub
+		  
+>docker push domendolar/rasd:latest		  
+
+6. Run new docker
+
+> docker run -d --shm-size=1g -p 88:88 domendolar/rasd:latest
+
+Test RASD 
+http://127.0.0.1:88/ords/your_app_schema/!welcome.webclient
+		  

@@ -1,0 +1,582 @@
+create or replace package RASDC_SHARE is
+  /*
+  // +----------------------------------------------------------------------+
+  // | RASD - Rapid Application Service Development                         |
+  // +----------------------------------------------------------------------+
+  // | Copyright (C) 2014       http://rasd.sourceforge.net                 |
+  // +----------------------------------------------------------------------+
+  // | This program is free software; you can redistribute it and/or modify |
+  // | it under the terms of the GNU General Public License as published by |
+  // | the Free Software Foundation; either version 2 of the License, or    |
+  // | (at your option) any later version.                                  |
+  // |                                                                      |
+  // | This program is distributed in the hope that it will be useful       |
+  // | but WITHOUT ANY WARRANTY; without even the implied warranty of       |
+  // | MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the         |
+  // | GNU General Public License for more details.                         |
+  // +----------------------------------------------------------------------+
+  // | Author: Domen Dolar       <domendolar@users.sourceforge.net>         |
+  // +----------------------------------------------------------------------+
+  */
+  function version(p_log out varchar2) return varchar2;
+  procedure Program(name_array in owa.vc_arr, value_array in owa.vc_arr);
+end;
+/
+
+create or replace package body RASDC_SHARE is
+  /*
+  // +----------------------------------------------------------------------+
+  // | RASD - Rapid Application Service Development                         |
+  // +----------------------------------------------------------------------+
+  // | Copyright (C) 2014       http://rasd.sourceforge.net                 |
+  // +----------------------------------------------------------------------+
+  // | This program is free software; you can redistribute it and/or modify |
+  // | it under the terms of the GNU General Public License as published by |
+  // | the Free Software Foundation; either version 2 of the License, or    |
+  // | (at your option) any later version.                                  |
+  // |                                                                      |
+  // | This program is distributed in the hope that it will be useful       |
+  // | but WITHOUT ANY WARRANTY; without even the implied warranty of       |
+  // | MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the         |
+  // | GNU General Public License for more details.                         |
+  // +----------------------------------------------------------------------+
+  // | Author: Domen Dolar       <domendolar@users.sourceforge.net>         |
+  // +----------------------------------------------------------------------+
+  */
+
+  type rtab is table of rowid index by binary_integer;
+  type ntab is table of number index by binary_integer;
+  type dtab is table of date index by binary_integer;
+  type ctab is table of varchar2(4000) index by binary_integer;
+  type itab is table of pls_integer index by binary_integer;
+
+  function version(p_log out varchar2) return varchar2 is
+  begin
+    p_log := '/* Change LOG:
+20180713 - Changed that engine version is copied to form from owner. (before always version 10 was added)    
+*/';
+    return 'v.1.1.20150814225530';
+
+  end;
+
+  procedure Program(name_array in owa.vc_arr, value_array in owa.vc_arr) is
+    ACTION       varchar2(4000);
+    LANG         varchar2(4000);
+    PFORMID      varchar2(4000);
+    PELEMENTID   varchar2(4000);
+    PELEMENT     varchar2(4000);
+    SPOROCILO    varchar2(4000);
+    b10RS        ctab;
+    b10rid       rtab;
+    b10formid    ntab;
+    b10engineid  ntab;
+    b10editor    ctab;
+    b10owner     ctab;
+    b10lobid     ctab;
+    procedure on_submit is
+      num_entries number := name_array.count;
+      v_max       pls_integer := 0;
+    begin
+      for i__ in 1 .. nvl(num_entries, 0) loop
+        if 1 = 2 then
+          null;
+        elsif upper(name_array(i__)) = upper('ACTION') then
+          ACTION := value_array(i__);
+        elsif upper(name_array(i__)) = upper('LANG') then
+          LANG := value_array(i__);
+        elsif upper(name_array(i__)) = upper('PFORMID') then
+          PFORMID := value_array(i__);
+        elsif upper(name_array(i__)) = upper('PELEMENTID') then
+          PELEMENTID := value_array(i__);
+        elsif upper(name_array(i__)) = upper('PELEMENT') then
+          PELEMENT := value_array(i__);
+        elsif upper(name_array(i__)) = upper('SPOROCILO') then
+          SPOROCILO := value_array(i__);
+        elsif upper(name_array(i__)) =
+              upper('B10RS_' ||
+                    substr(name_array(i__),
+                           instr(name_array(i__), '_', -1) + 1)) then
+          b10RS(to_number(substr(name_array(i__), instr(name_array(i__), '_', -1) + 1))) := value_array(i__);
+        elsif upper(name_array(i__)) =
+              upper('B10RID_' ||
+                    substr(name_array(i__),
+                           instr(name_array(i__), '_', -1) + 1)) then
+          b10rid(to_number(substr(name_array(i__), instr(name_array(i__), '_', -1) + 1))) := chartorowid(value_array(i__));
+        elsif upper(name_array(i__)) =
+              upper('B10formid_' ||
+                    substr(name_array(i__),
+                           instr(name_array(i__), '_', -1) + 1)) then
+          b10formid(to_number(substr(name_array(i__), instr(name_array(i__), '_', -1) + 1))) := rasdi_client.varchr2number(value_array(i__));
+        elsif upper(name_array(i__)) =
+              upper('B10ENGINEID_' ||
+                    substr(name_array(i__),
+                           instr(name_array(i__), '_', -1) + 1)) then
+          b10EngineID(to_number(substr(name_array(i__), instr(name_array(i__), '_', -1) + 1))) := rasdi_client.varchr2number(value_array(i__));
+
+        elsif upper(name_array(i__)) =
+              upper('b10editor_' ||
+                    substr(name_array(i__),
+                           instr(name_array(i__), '_', -1) + 1)) then
+          b10editor(to_number(substr(name_array(i__), instr(name_array(i__), '_', -1) + 1))) := value_array(i__);
+        elsif upper(name_array(i__)) =
+              upper('b10owner_' ||
+                    substr(name_array(i__),
+                           instr(name_array(i__), '_', -1) + 1)) then
+          b10owner(to_number(substr(name_array(i__), instr(name_array(i__), '_', -1) + 1))) := value_array(i__);
+        elsif upper(name_array(i__)) =
+              upper('b10lobid_' ||
+                    substr(name_array(i__),
+                           instr(name_array(i__), '_', -1) + 1)) then
+          b10lobid(to_number(substr(name_array(i__), instr(name_array(i__), '_', -1) + 1))) := value_array(i__);
+        end if;
+      end loop;
+      v_max := 0;
+      if b10RS.count > v_max then
+        v_max := b10RS.count;
+      end if;
+      if b10rid.count > v_max then
+        v_max := b10rid.count;
+      end if;
+      if b10formid.count > v_max then
+        v_max := b10formid.count;
+      end if;
+      if b10engineid.count > v_max then
+        v_max := b10engineid.count;
+      end if;
+      if b10editor.count > v_max then
+        v_max := b10editor.count;
+      end if;
+      if b10owner.count > v_max then
+        v_max := b10owner.count;
+      end if;
+      if b10lobid.count > v_max then
+        v_max := b10lobid.count;
+      end if;
+      for i__ in 1 .. v_max loop
+        if not b10RS.exists(i__) then
+          b10RS(i__) := null;
+        end if;
+        if not b10rid.exists(i__) then
+          b10rid(i__) := null;
+        end if;
+        if not b10formid.exists(i__) then
+          b10formid(i__) := to_number(null);
+        end if;
+        if not b10engineid.exists(i__) then
+          b10engineid(i__) := to_number(null);
+        end if;
+        if not b10editor.exists(i__) then
+          b10editor(i__) := null;
+        end if;
+        if not b10owner.exists(i__) then
+          b10owner(i__) := null;
+        end if;
+        if not b10lobid.exists(i__) then
+          b10lobid(i__) := null;
+        end if;
+        null;
+      end loop;
+    end;
+    procedure post_submit is
+    begin
+      null;
+    end;
+    procedure psubmit is
+    begin
+      on_submit;
+      post_submit;
+    end;
+    procedure pclear_b10(pstart number) is
+      i__ pls_integer;
+      j__ pls_integer;
+      k__ pls_integer;
+    begin
+      i__ := pstart;
+      if 0 = 0 then
+        k__ := i__ + 2;
+      else
+        if i__ > 0 then
+          k__ := i__ + 2;
+        else
+          k__ := 2 + 0;
+        end if;
+      end if;
+      for j__ in i__ + 1 .. k__ loop
+        b10RS(j__) := null;
+        b10rid(j__) := null;
+        b10formid(j__) := null;
+        b10engineid(j__) := null;
+        b10editor(j__) := null;
+        b10owner(j__) := null;
+        b10lobid(j__) := null;
+        b10RS(j__) := 'I';
+
+      end loop;
+    end;
+    procedure pclear_form is
+    begin
+      ACTION     := null;
+      LANG       := null;
+      PFORMID    := null;
+      PELEMENTID := null;
+      SPOROCILO  := null;
+      null;
+    end;
+    procedure pclear is
+    begin
+      pclear_form;
+      pclear_b10(0);
+      null;
+    end;
+    procedure pselect_b10 is
+      i__ pls_integer;
+    begin
+      b10RS.delete;
+      b10rid.delete;
+      b10formid.delete;
+      b10engineid.delete;
+      b10editor.delete;
+      b10owner.delete;
+      b10lobid.delete;
+      --<pre_select formid="50015" blockid="b10">
+      --</pre_select>
+      declare
+        TYPE ctype__ is REF CURSOR;
+        c__ ctype__;
+      begin
+        OPEN c__ FOR
+        --<SQL formid="50015" blockid="b10">
+select rid, formid, engineid, myusers.owner editor, shares.owner, decode(lobid,null,'A', 'X" checked "') lobid
+from 
+(select distinct owner 
+from rasd_forms_compiled
+where lobid = rasdi_client.secGetLOB
+ and  owner <> rasdi_client.secGetUsername) myusers
+, ( 
+select rowid rid, formid, engineid, owner, editor, lobid
+from rasd_forms_compiled 
+where formid = pformid
+) shares, (
+select formid formx
+from rasd_forms_compiled 
+where formid = pformid
+  and owner = rasdi_client.secGetUsername
+  and editor = owner
+) yyy
+where myusers.owner =  shares.editor(+)
+  and yyy.formx = pformid
+order by myusers.owner
+          --</SQL>
+          ;
+        i__ := 1;
+        LOOP
+          FETCH c__
+            INTO b10rid(i__),
+                 b10formid(i__),
+                 b10engineid(i__),
+                 b10editor(i__),
+                 b10owner(i__),
+                 b10lobid(i__);
+          exit when c__%notfound;
+          if c__%rowcount >= 1 then
+            b10RS(i__) := null;
+            b10RS(i__) := 'U';
+
+            --<post_select formid="50015" blockid="b10">
+            --</post_select>
+            i__ := i__ + 1;
+          end if;
+        END LOOP;
+        if c__%rowcount < 1 then
+          b10RS.delete(1);
+          b10rid.delete(1);
+          b10formid.delete(1);
+          b10engineid.delete(1);
+          b10editor.delete(1);
+          b10owner.delete(1);
+          b10lobid.delete(1);
+          i__ := 0;
+        end if;
+        CLOSE c__;
+      end;
+      --pclear_b10(b10rid.count);
+      null;
+    end;
+    procedure pselect is
+    begin
+      if 1 = 1 then
+        pselect_b10;
+      end if;
+      null;
+    end;
+    procedure pcommit_b10 is
+      v_zaklepanje varchar2(4000);
+    begin
+      for i__ in 1 .. b10RS.count loop
+        --<on_validate formid="50015" blockid="b10">
+        if b10rid(i__) is null then b10RS(i__) := 'I'; end if;
+        --</on_validate>
+        if substr(b10RS(i__), 1, 1) = 'I' then
+          --INSERT
+          if b10lobid(i__) is not null  then
+            --<pre_insert formid="50015" blockid="b10">
+            B10formid(i__) := PFORMID;
+          --  b10engineid(i__) := 10;
+          
+select max(engineid) into  b10engineid(i__)
+from rasd_forms_compiled 
+where formid = pformid
+  and owner = rasdi_client.secGetUsername
+  and editor = owner;
+          
+            b10owner(i__) :=  rasdi_client.secGetUsername;
+            b10lobid(i__) := rasdi_client.secGetLOB;
+
+            --</pre_insert>
+         
+            insert into rasd_forms_compiled
+              (formid, engineid, change, compileyn, application, owner, editor, lobid)
+            values
+              (B10formid(i__), b10engineid(i__), sysdate, 'N', 'shered form', b10owner(i__) , b10editor(i__), b10lobid(i__));
+            --<post_insert formid="50015" blockid="b10">
+            --</post_insert>
+            null;
+          end if;
+          null;
+        else
+          -- UPDATE ali DELETE;
+
+          if b10lobid(i__) is null and b10rid(i__) is not null then
+            --DELETE
+            --<pre_delete formid="50015" blockid="b10">
+            --</pre_delete>
+            delete rasd_forms_compiled where ROWID = b10rid(i__);
+            --<post_delete formid="50015" blockid="b10">
+            --</post_delete>
+          end if;
+          null;
+        end if;
+        null;
+      end loop;
+      null;
+    end;
+    procedure pcommit is
+    begin
+      --<pre_commit formid="50015" blockid="">
+      --</pre_commit>
+      if 1 = 1 then
+        pcommit_b10;
+      end if;
+      --<post_commit formid="50015" blockid="">
+      --</post_commit>
+      null;
+    end;
+    procedure phtml is
+      ib10 pls_integer;
+      --povezavein
+      --SQL
+      --TEXT
+      procedure js_LOVREF(value varchar2, name varchar2 default null) is
+      begin
+        htp.p('<SCRIPT LANGUAGE="JavaScript">');
+        htp.p('js_LOVREF(''' || value || ''')');
+        htp.p('</SCRIPT>');
+      end;
+      --TF
+      procedure js_INPUT_CHECKBOX_DEF(value varchar2,
+                                      name  varchar2 default null) is
+      begin
+        if value = 'Y' then
+          htp.prn('Y" checked "');
+        else
+          htp.prn('Y');
+        end if;
+      end;
+      --SQL-T
+    begin
+      --js povezavein
+      --js SQL
+      --js TEXT
+      htp.p('<SCRIPT LANGUAGE="JavaScript">');
+      htp.p('function js_LOVREF(pvalue) {');
+      htp.p('  document.write(''<OPTION CLASS=selectp ''+ ((pvalue=='''')?''selected'':'''') +'' value=""> '')');
+      htp.p('  document.write(''<OPTION CLASS=selectp ''+ ((pvalue==''G'')?''selected'':'''') +'' value="G">' ||
+            RASDI_TRNSLT.text('Eng.', lang) || ' '')');
+      htp.p('  document.write(''<OPTION CLASS=selectp ''+ ((pvalue==''V'')?''selected'':'''') +'' value="V">' ||
+            RASDI_TRNSLT.text('Chng', lang) || ' '')');
+      htp.p('  document.write(''<OPTION CLASS=selectp ''+ ((pvalue==''R'')?''selected'':'''') +'' value="R">' ||
+            RASDI_TRNSLT.text('Ref.', lang) || ' '')');
+      htp.p('}');
+      htp.p('</SCRIPT>');
+      --js TF
+      htp.prn('<SCRIPT LANGUAGE="JavaScript">');
+      htp.p('</SCRIPT>');
+      htp.prn('<HTML>
+<HEAD>
+<META HTTP-EQUIV="Content-Type" CONTENT="text/html;CHARSET=WINDOWS-1250">
+<META HTTP-EQUIV="Pragma" CONTENT="no-cache"><META HTTP-EQUIV="Expires" CONTENT="-1">
+'||RASDC_LIBRARY.RASD_UI_Libs||'
+<TITLE>Share form</TITLE>
+</HEAD>
+<BODY><FONT ID="RASDC_ATTRIBUTES_LAB">');
+      htp.prn('</FONT>
+<DIV CLASS="hint">
+<FORM NAME="RASDC_SHARE" METHOD="post" ACTION="!rasdc_share.program">
+
+<P align="right">
+');
+if rasdc_library.allowEditing(pformid) then
+htp.p('
+<INPUT class="SUBMIT" type="submit" value="' ||
+              RASDI_TRNSLT.text('Save', lang) ||
+              '" name="ACTION">
+');
+end if;
+htp.p('
+<INPUT class="SUBMIT" type="reset" value="' ||
+              RASDI_TRNSLT.text('Reset', lang) ||
+              '" name="ACTION">
+<INPUT class="SUBMIT" type="button" value="' ||
+              RASDI_TRNSLT.text('Close', lang) ||
+              '" onclick="window.close();">
+</P>
+
+<INPUT NAME="LANG" TYPE="hidden" VALUE="' || LANG ||
+              '" CLASS="HIDDEN"><INPUT NAME="PFORMID" TYPE="hidden" VALUE="' ||
+              PFORMID ||
+              '" CLASS="HIDDEN"><INPUT NAME="PELEMENTID" TYPE="hidden" VALUE="' ||
+              PELEMENTID ||
+              '" CLASS="HIDDEN"><INPUT NAME="SPOROCILO" TYPE="hidden" VALUE="' ||
+              SPOROCILO ||
+              '" CLASS="HIDDEN">
+<TABLE BORDER="0">
+<CAPTION><FONT ID="B10_LAB"></FONT></CAPTION><TR>
+<TD class="label" align="center"><FONT ID="B10orderby_LAB">' ||
+              RASDI_TRNSLT.text('User', lang) ||
+              '</FONT></TD>
+<TD class="label" align="center"><FONT ID="B10name_LAB" color="red">' ||
+              RASDI_TRNSLT.text('Share', lang) ||
+              '</FONT></TD>
+</TR>');
+      for ib10 in 1 .. b10RS.count loop
+        htp.prn('<TR ID="B10_BLOK" onmouseover="javascript:style.backgroundColor=''#E9E9E9''" onmouseout="javascript:style.backgroundColor=''#ffffff''"><INPUT NAME="B10RS_' || ib10 ||
+                '" TYPE="hidden" VALUE="' || b10RS(ib10) ||
+                '" CLASS="HIDDEN"><INPUT NAME="B10RID_' || ib10 ||
+                '" TYPE="hidden" VALUE="' || b10rid(ib10) ||
+                '" CLASS="HIDDEN"><INPUT NAME="B10formid_' || ib10 ||
+                '" TYPE="hidden" VALUE="' || b10formid(ib10) ||
+                '" CLASS="HIDDEN"><INPUT NAME="B10engineid_' || ib10 ||
+                '" TYPE="hidden" VALUE="' || B10engineid(ib10) ||
+                '" CLASS="HIDDEN">
+<TD>' ||
+                b10editor(ib10) || '
+<INPUT NAME="B10editor_' || ib10 || '" VALUE="' ||
+                b10editor(ib10) || '" CLASS="TEXT" TYPE="hidden">
+</TD>
+<TD><INPUT NAME="b10lobid_' || ib10 || '" VALUE="' ||
+                b10lobid(ib10) || '" CLASS="TEXT" TYPE="CHECKBOX"></TD>
+</TR>');
+      end loop;
+      htp.prn('</TABLE>
+<table width="100%" border="0"><tr>
+');
+      if SPOROCILO is not null then
+        htp.prn('
+<td width="1%" class="sporociloh" nowrap><FONT COLOR="green" size="4">' ||
+                RASDI_TRNSLT.text('Message', lang) ||
+                ': </FONT></td>
+<td class="sporocilom">' ||
+                RASDI_TRNSLT.text(sporocilo, lang) || '</td>
+');
+      end if;
+      htp.prn('
+<td  align="right">
+');
+if rasdc_library.allowEditing(pformid) then
+htp.p('
+<INPUT class="SUBMIT" type="submit" value="' ||
+              RASDI_TRNSLT.text('Save', lang) ||
+              '" name="ACTION">
+');
+end if;
+htp.p('
+<INPUT class="SUBMIT" type="reset" value="' ||
+              RASDI_TRNSLT.text('Reset', lang) ||
+              '" name="ACTION">
+<INPUT class="SUBMIT" type="button" value="' ||
+              RASDI_TRNSLT.text('Close', lang) || '" onclick="window.close();">
+</td>
+</tr>
+</table>
+</FORM></BODY>
+<SCRIPT LANGUAGE="JavaScript">
+ izpis_dna('''||rasdi_client.c_registerto||''');
+</SCRIPT>
+</HTML>
+    ');
+    exception
+      when others then
+        htp.p('<font color="red">' ||
+              replace(replace(sqlerrm,
+                              '
+',
+                              '\n'),
+                      '"',
+                      '\"') || '</font>');
+        htp.p('<script language="JavaScript">');
+        htp.p('<!--');
+        htp.p('  alert("' || replace(replace(sqlerrm,
+                                             '
+',
+                                             '\n'),
+                                     '"',
+                                     '\"') || '");');
+        htp.p('history.go(-1);');
+        htp.p('// -->');
+        htp.p('</script>');
+
+        null;
+    end;
+  begin
+    psubmit;
+    if ACTION = 'Back' then
+      pselect;
+      phtml;
+    elsif ACTION = 'Forward' then
+      pselect;
+      phtml;
+    elsif ACTION = 'Search' then
+      pselect;
+      phtml;
+    elsif ACTION = 'Save' then
+      pcommit;
+      pselect;
+      phtml;
+    elsif ACTION = 'Clear' then
+      pclear;
+      phtml;
+    else
+      pselect;
+      phtml;
+    end if;
+
+  exception
+    when rasdi_client.e_finished then
+      null;
+    when others then
+      htp.p('<script language="JavaScript">');
+      htp.p('<!--');
+      htp.p('  alert("' || replace(replace(sqlerrm,
+                                           '
+',
+                                           '\n'),
+                                   '"',
+                                   '\"') || '");');
+      htp.p('history.go(-1);');
+      htp.p('// -->');
+      htp.p('</script>');
+
+  end;
+end RASDC_SHARE;
+/
+

@@ -1,0 +1,332 @@
+create or replace package rasdi_client IS
+  /*
+  // +----------------------------------------------------------------------+
+  // | RASD - Rapid Application Service Development                         |
+  // +----------------------------------------------------------------------+
+  // | Copyright (C) 2014       http://rasd.sourceforge.net                 |
+  // +----------------------------------------------------------------------+
+  // | This program is free software; you can redistribute it and/or modify |
+  // | it under the terms of the GNU General Public License as published by |
+  // | the Free Software Foundation; either version 2 of the License, or    |
+  // | (at your option) any later version.                                  |
+  // |                                                                      |
+  // | This program is distributed in the hope that it will be useful       |
+  // | but WITHOUT ANY WARRANTY; without even the implied warranty of       |
+  // | MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the         |
+  // | GNU General Public License for more details.                         |
+  // +----------------------------------------------------------------------+
+  // | Author: Domen Dolar       <domendolar@users.sourceforge.net>         |
+  // +----------------------------------------------------------------------+
+  */
+  function version(p_log out varchar2) return varchar2;
+
+  type rtab is table of rowid index by binary_integer;
+  type ntab is table of number index by binary_integer;
+  type dtab is table of date index by binary_integer;
+  type ctab is table of varchar2(4000) index by binary_integer;
+  type cctab is table of varchar2(32000) index by binary_integer;
+  type itab is table of pls_integer index by binary_integer;
+
+  e_finished exception;
+
+  
+  /* do not change*/ C_DATE_FORMAT    constant varchar2(10) := 'mm/dd/yyyy';
+  /* do not change*/ C_DATE_TIME_FORMAT    constant varchar2(30) := 'mm/dd/yyyy hh24:mi:ss';
+  /* do not change*/ C_TIMESTAMP_FORMAT constant varchar2(30) := 'mm/dd/yyyy hh24:mi:ss.ff';
+  /* do not change*/ C_NUMBER_DECIMAL constant varchar2(1) := ',';
+  /* do not change*/ C_NUMBER_THOUSAND constant varchar2(1) := '.';
+  
+    
+  c_registerTo varchar2(100) := 'place your enviorment in RASDI_CLIENT - c_registerTo'; 
+  c_defaultLanguage      varchar2(30) := 'SL'; -- translates are in table rasd_translates
+  c_WalletLocation       varchar2(50) := 'file:/u01/../wallet';
+  c_WalletPwd            varchar2(50) := 'pwd';
+  
+  function varchr2number(p_value varchar2) return number;
+
+
+  /*Security functions*/
+  function secSuperUsers return varchar2;
+  function secGetUsername return varchar2;
+  function secGetLOB return varchar2;
+  procedure secCheckPermission(p_form varchar2, p_action varchar2);
+  procedure secCheckCredentials(p_username varchar2,
+                                p_password varchar2,
+                                p_other    varchar2 default null);
+
+  procedure sessionStart;
+  procedure sessionSetValue(pname varchar2, pvalue varchar2);
+  function  sessionGetValue(pname varchar2) return varchar2;
+  procedure sessionClose;
+
+end;
+/
+
+create or replace package body rasdi_client is
+  /*
+  // +----------------------------------------------------------------------+
+  // | RASD - Rapid Application Service Development                         |
+  // +----------------------------------------------------------------------+
+  // | Copyright (C) 2014       http://rasd.sourceforge.net                 |
+  // +----------------------------------------------------------------------+
+  // | This program is free software; you can redistribute it and/or modify |
+  // | it under the terms of the GNU General Public License as published by |
+  // | the Free Software Foundation; either version 2 of the License, or    |
+  // | (at your option) any later version.                                  |
+  // |                                                                      |
+  // | This program is distributed in the hope that it will be useful       |
+  // | but WITHOUT ANY WARRANTY; without even the implied warranty of       |
+  // | MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the         |
+  // | GNU General Public License for more details.                         |
+  // +----------------------------------------------------------------------+
+  // | Author: Domen Dolar       <domendolar@users.sourceforge.net>         |
+  // +----------------------------------------------------------------------+
+  */
+
+  function version(p_log out varchar2) return varchar2 is
+  begin
+    p_log := '/* Change LOG:
+20180321 - Added default language    
+20171201 - Added C_DATE_TIME_FORMAT        
+20171019 - Added suport for ORDS - reading DAD values    
+20151202 - Added session functions    
+20150814 - Added superuser
+*/';
+    return 'v.1.20180321225530';
+
+  end;
+
+  function getDAD return varchar2 is
+    vdad varchar2(1000);
+  begin
+    vdad := OWA_UTIL.get_cgi_env('DAD_NAME');
+    if vdad is null then
+      vdad := upper(OWA_UTIL.get_cgi_env('SCRIPT_NAME'));
+      vdad := substr( replace (upper(vdad) , '/ORDS/' , '') , 1 , instr(replace (upper(vdad) , '/ORDS/' , ''),'/')-1);
+    end if;
+    
+    return vdad;
+  end;  
+
+
+ function varchr2number(p_value varchar2) return number is
+    v_dot   number;
+    v_comma number;
+    v_value varchar2(30) := p_value;
+    error exception;
+  begin
+    if p_value is not null then
+      v_dot := instr(v_value, C_NUMBER_THOUSAND);
+      if v_dot = 0 then
+        return to_number(v_value);
+      else
+        while v_dot <> 0 Loop
+          v_value := substr(v_value, v_dot + 1);
+          v_dot   := instr(v_value, C_NUMBER_THOUSAND);
+          v_comma := instr(v_value, C_NUMBER_DECIMAL);
+          if v_dot <> 0 then
+            if v_dot <> 4 then
+              raise error;
+            end if;
+          else
+            
+            if v_comma <> 0 then
+              if v_comma <> 4 then
+                raise error;
+              else
+                return(to_number(replace(p_value, C_NUMBER_THOUSAND, '')));
+              end if;
+            else
+              if length(v_value) <> 3 then
+                raise error;
+              else
+                return(to_number(replace(p_value, C_NUMBER_THOUSAND, '')));
+              end if;
+            end if;
+          end if;
+        end loop;
+      end if;
+    else
+      return(to_number(null));
+    end if;
+  end;
+
+
+  function getHtmlMenuList(p_formname varchar2) return varchar2 is
+    v_menu varchar2(1000);
+  begin
+
+    v_menu := '<ul class="menu">
+               <li> <a href=""><span>M1</span></a></li>
+               <li> <a href=""><span>M2</span></a></li>
+              </ul>';
+
+    return v_menu;
+  end;
+
+  /*Security functions*/
+   function secSuperUsers return varchar2 is
+  begin
+    /*Your code. Usernamemes of super users separated with ,. They can only view the code.*/
+    return 'DOMEN.DOLAR,DARIJA.ABRAMIC,Z51276';
+    /*---------*/
+  end; 
+
+  function secGetUsername return varchar2 is
+         vcv varchar2(100);
+  begin
+    /*Your code. Username is from cgi enviorment and it is based on you DADs configutration.*/   
+    declare
+      vc OWA_COOKIE.cookie;     
+    begin
+      vc := owa_cookie.get('guid');
+      vcv := vc.vals(1);
+    exception when others then
+      vcv := '';
+    end;
+    
+     return ar.sfarlb001002.loggedUser(vcv);
+    /*---------*/
+  exception when others then 
+      raise_application_error('-20000', 'Login GIUD does not exists!');    
+  end;
+
+  function secGetLOB return varchar2 is
+    vc   OWA_COOKIE.cookie;
+    vdad varchar2(1000);
+    vlob varchar2(1000);
+  begin
+    /*Your code. LineOfBusiness is from cgi enviorment and it is based on you DADs configutration.*/
+    /*Here you can return custom input lob or you can always return DADs*/
+    vdad := getDAD;
+    vc   := owa_cookie.get('LOGONLOB');
+    vlob := vc.vals(1);
+
+    return vlob;
+    /*---------*/
+  end;
+
+  procedure secCheckPermission(p_form varchar2, p_action varchar2) is
+         vcv varchar2(100);
+         vuser varchar2(100);
+         vlob varchar2(100);
+  begin
+   
+    /*Your code.*/
+    /*
+    procedure preveri_privilegije(p_id number) is
+       n number;
+       --p_id -> ID FORME KI KONTROLIRAMO ?E IMA editor PRAVICE ZA NJO!!!
+       venota RASD_PRVS_LOB.lobid%type;
+       vuname  RASD_FORMS_COMPILED.editor%type;
+      begin
+        venota := rasd_client.secGetLOB;
+        vuname  := rasd_client.secGetUsername;
+
+        if venota is not null and vuname is not null then
+        select count(*) into n --id od forme
+        from RASD_FORMS_COMPILED fg
+        where fg.formid = p_id
+          and fg.editor = vuname
+          and fg.lobid = venota;
+        else
+         n := 0;
+        end if;
+
+        if n > 0 then return; end if;
+
+        owa_util.redirect_url('!rasdc_security.logon');
+      end;
+    */
+
+    declare
+      vc OWA_COOKIE.cookie;     
+    begin
+      vc := owa_cookie.get('guid');
+      vcv := vc.vals(1);
+    exception when others then
+      vcv := '';
+    end;
+  
+    vcv := ar.sfarlb001002.loggedUser(vcv);
+   
+    if vcv is null then
+      raise_application_error('-20000', 'Dragi developer - GUID ne obstaja. Potrebna je ponovna prijava preko portala!!');    
+    else 
+
+    declare
+      vc OWA_COOKIE.cookie;     
+    begin
+      vc := owa_cookie.get('LOGON');
+      vuser := vc.vals(1);
+    exception when others then
+      vuser := '';
+    end;
+
+    declare
+      vc OWA_COOKIE.cookie;     
+    begin
+      vc := owa_cookie.get('LOGONLOB');
+      vlob := vc.vals(1);
+    exception when others then
+      vlob := '';
+    end;
+    
+    if nvl(vuser,'.') <> nvl(vcv,',') then
+      OWA_COOKIE.SEND('LOGON', vcv, null, '/' , '');
+     
+     
+      OWA_COOKIE.SEND('LOGONLOB', upper(getDAD) , null, '/' , '');
+   
+
+      OWA_UTIL.REDIRECT_URL(rasdc_security.C_starturl);
+
+    end if;
+   
+    end if;
+
+  --  OWA_UTIL.REDIRECT_URL(rasdc_security.C_login );
+
+   /*---------*/
+  end;
+  
+  procedure secCheckCredentials(p_username varchar2,
+                                p_password varchar2,
+                                p_other    varchar2 default null) is
+  begin
+    /*Your code.*/
+    if false is null then
+      raise_application_error('-20000', 'Invalid user logon credentials!');
+    end if;
+    /*---------*/
+  end;
+
+
+  procedure sessionStart is
+  begin
+    owa_util.mime_header('text/html', FALSE);
+  end;
+
+  procedure sessionSetValue(pname varchar2, pvalue varchar2) is
+  begin
+    OWA_COOKIE.SEND('rasdi$'||pname, pvalue , null,null);
+  end;
+
+  function sessionGetValue(pname varchar2) return varchar2 is
+     vc OWA_COOKIE.cookie;
+  begin
+     vc := owa_cookie.get('rasdi$'||pname);
+     return vc.vals(1);
+  exception when others then
+    return '';
+  end;
+
+  procedure sessionclose is
+  begin
+     owa_util.http_header_close;
+  end;
+
+
+end;
+/
+

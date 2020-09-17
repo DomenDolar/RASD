@@ -1,0 +1,720 @@
+create or replace package RASDC_ATTRIBUTES is
+  /*
+  // +----------------------------------------------------------------------+
+  // | RASD - Rapid Application Service Development                         |
+  // +----------------------------------------------------------------------+
+  // | Copyright (C) 2014       http://rasd.sourceforge.net                 |
+  // +----------------------------------------------------------------------+
+  // | This program is free software; you can redistribute it and/or modify |
+  // | it under the terms of the GNU General Public License as published by |
+  // | the Free Software Foundation; either version 2 of the License, or    |
+  // | (at your option) any later version.                                  |
+  // |                                                                      |
+  // | This program is distributed in the hope that it will be useful       |
+  // | but WITHOUT ANY WARRANTY; without even the implied warranty of       |
+  // | MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the         |
+  // | GNU General Public License for more details.                         |
+  // +----------------------------------------------------------------------+
+  // | Author: Domen Dolar       <domendolar@users.sourceforge.net>         |
+  // +----------------------------------------------------------------------+
+  */
+  function version(p_log out varchar2) return varchar2;
+  procedure Program(name_array in owa.vc_arr, value_array in owa.vc_arr);
+end;
+/
+
+create or replace package body RASDC_ATTRIBUTES is
+  /*
+  // +----------------------------------------------------------------------+
+  // | RASD - Rapid Application Service Development                         |
+  // +----------------------------------------------------------------------+
+  // | Copyright (C) 2014       http://rasd.sourceforge.net                 |
+  // +----------------------------------------------------------------------+
+  // | This program is free software; you can redistribute it and/or modify |
+  // | it under the terms of the GNU General Public License as published by |
+  // | the Free Software Foundation; either version 2 of the License, or    |
+  // | (at your option) any later version.                                  |
+  // |                                                                      |
+  // | This program is distributed in the hope that it will be useful       |
+  // | but WITHOUT ANY WARRANTY; without even the implied warranty of       |
+  // | MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the         |
+  // | GNU General Public License for more details.                         |
+  // +----------------------------------------------------------------------+
+  // | Author: Domen Dolar       <domendolar@users.sourceforge.net>         |
+  // +----------------------------------------------------------------------+
+  */
+
+  type rtab is table of rowid index by binary_integer;
+  type ntab is table of number index by binary_integer;
+  type dtab is table of date index by binary_integer;
+  type ctab is table of varchar2(4000) index by binary_integer;
+  type itab is table of pls_integer index by binary_integer;
+
+  function version(p_log out varchar2) return varchar2 is
+  begin
+    p_log := '/* Change LOG:
+20180517 - Added filter on element type C (C - Close Start tag attributes)    
+20150814 - Added superuser    
+20141027 - Added footer on all pages
+*/';
+    return 'v.1.1.20180517225530';
+
+  end;
+
+  procedure Program(name_array in owa.vc_arr, value_array in owa.vc_arr) is
+    ACTION       varchar2(4000);
+    LANG         varchar2(4000);
+    PFORMID      varchar2(4000);
+    PELEMENTID   varchar2(4000);
+    PELEMENT     varchar2(4000);
+    SPOROCILO    varchar2(4000);
+    b10RS        ctab;
+    b10rid       rtab;
+    b10formid    ntab;
+    b10ELEMENTID ntab;
+    b10orderby   ntab;
+    b10attribute ctab;
+    b10type      ctab;
+    b10name      ctab;
+    b10value     ctab;
+    b10source    ctab;
+    b10hiddenyn  ctab;
+    procedure on_submit is
+      num_entries number := name_array.count;
+      v_max       pls_integer := 0;
+    begin
+      for i__ in 1 .. nvl(num_entries, 0) loop
+        if 1 = 2 then
+          null;
+        elsif upper(name_array(i__)) = upper('ACTION') then
+          ACTION := value_array(i__);
+        elsif upper(name_array(i__)) = upper('LANG') then
+          LANG := value_array(i__);
+        elsif upper(name_array(i__)) = upper('PFORMID') then
+          PFORMID := value_array(i__);
+        elsif upper(name_array(i__)) = upper('PELEMENTID') then
+          PELEMENTID := value_array(i__);
+        elsif upper(name_array(i__)) = upper('PELEMENT') then
+          PELEMENT := value_array(i__);
+        elsif upper(name_array(i__)) = upper('SPOROCILO') then
+          SPOROCILO := value_array(i__);
+        elsif upper(name_array(i__)) =
+              upper('B10RS_' ||
+                    substr(name_array(i__),
+                           instr(name_array(i__), '_', -1) + 1)) then
+          b10RS(to_number(substr(name_array(i__), instr(name_array(i__), '_', -1) + 1))) := value_array(i__);
+        elsif upper(name_array(i__)) =
+              upper('B10RID_' ||
+                    substr(name_array(i__),
+                           instr(name_array(i__), '_', -1) + 1)) then
+          b10rid(to_number(substr(name_array(i__), instr(name_array(i__), '_', -1) + 1))) := chartorowid(value_array(i__));
+        elsif upper(name_array(i__)) =
+              upper('B10formid_' ||
+                    substr(name_array(i__),
+                           instr(name_array(i__), '_', -1) + 1)) then
+          b10formid(to_number(substr(name_array(i__), instr(name_array(i__), '_', -1) + 1))) := rasdi_client.varchr2number(value_array(i__));
+        elsif upper(name_array(i__)) =
+              upper('B10ELEMENTID_' ||
+                    substr(name_array(i__),
+                           instr(name_array(i__), '_', -1) + 1)) then
+          b10ELEMENTID(to_number(substr(name_array(i__), instr(name_array(i__), '_', -1) + 1))) := rasdi_client.varchr2number(value_array(i__));
+        elsif upper(name_array(i__)) =
+              upper('B10orderby_' ||
+                    substr(name_array(i__),
+                           instr(name_array(i__), '_', -1) + 1)) then
+          b10orderby(to_number(substr(name_array(i__), instr(name_array(i__), '_', -1) + 1))) := rasdi_client.varchr2number(value_array(i__));
+        elsif upper(name_array(i__)) =
+              upper('B10attribute_' ||
+                    substr(name_array(i__),
+                           instr(name_array(i__), '_', -1) + 1)) then
+          b10attribute(to_number(substr(name_array(i__), instr(name_array(i__), '_', -1) + 1))) := value_array(i__);
+        elsif upper(name_array(i__)) =
+              upper('B10type_' ||
+                    substr(name_array(i__),
+                           instr(name_array(i__), '_', -1) + 1)) then
+          b10type(to_number(substr(name_array(i__), instr(name_array(i__), '_', -1) + 1))) := value_array(i__);
+        elsif upper(name_array(i__)) =
+              upper('B10name_' ||
+                    substr(name_array(i__),
+                           instr(name_array(i__), '_', -1) + 1)) then
+          b10name(to_number(substr(name_array(i__), instr(name_array(i__), '_', -1) + 1))) := value_array(i__);
+        elsif upper(name_array(i__)) =
+              upper('B10value_' ||
+                    substr(name_array(i__),
+                           instr(name_array(i__), '_', -1) + 1)) then
+          b10value(to_number(substr(name_array(i__), instr(name_array(i__), '_', -1) + 1))) := value_array(i__);
+        elsif upper(name_array(i__)) =
+              upper('B10source_' ||
+                    substr(name_array(i__),
+                           instr(name_array(i__), '_', -1) + 1)) then
+          b10source(to_number(substr(name_array(i__), instr(name_array(i__), '_', -1) + 1))) := value_array(i__);
+        elsif upper(name_array(i__)) =
+              upper('B10hiddenyn_' ||
+                    substr(name_array(i__),
+                           instr(name_array(i__), '_', -1) + 1)) then
+          b10hiddenyn(to_number(substr(name_array(i__), instr(name_array(i__), '_', -1) + 1))) := value_array(i__);
+        end if;
+      end loop;
+      v_max := 0;
+      if b10RS.count > v_max then
+        v_max := b10RS.count;
+      end if;
+      if b10rid.count > v_max then
+        v_max := b10rid.count;
+      end if;
+      if b10formid.count > v_max then
+        v_max := b10formid.count;
+      end if;
+      if b10ELEMENTID.count > v_max then
+        v_max := b10ELEMENTID.count;
+      end if;
+      if b10orderby.count > v_max then
+        v_max := b10orderby.count;
+      end if;
+      if b10attribute.count > v_max then
+        v_max := b10attribute.count;
+      end if;
+      if b10type.count > v_max then
+        v_max := b10type.count;
+      end if;
+      if b10name.count > v_max then
+        v_max := b10name.count;
+      end if;
+      if b10value.count > v_max then
+        v_max := b10value.count;
+      end if;
+      if b10source.count > v_max then
+        v_max := b10source.count;
+      end if;
+      if b10hiddenyn.count > v_max then
+        v_max := b10hiddenyn.count;
+      end if;
+      for i__ in 1 .. v_max loop
+        if not b10RS.exists(i__) then
+          b10RS(i__) := null;
+        end if;
+        if not b10rid.exists(i__) then
+          b10rid(i__) := null;
+        end if;
+        if not b10formid.exists(i__) then
+          b10formid(i__) := to_number(null);
+        end if;
+        if not b10ELEMENTID.exists(i__) then
+          b10ELEMENTID(i__) := to_number(null);
+        end if;
+        if not b10orderby.exists(i__) then
+          b10orderby(i__) := to_number(null);
+        end if;
+        if not b10attribute.exists(i__) then
+          b10attribute(i__) := null;
+        end if;
+        if not b10type.exists(i__) then
+          b10type(i__) := null;
+        end if;
+        if not b10name.exists(i__) then
+          b10name(i__) := null;
+        end if;
+        if not b10value.exists(i__) then
+          b10value(i__) := null;
+        end if;
+        if not b10source.exists(i__) then
+          b10source(i__) := null;
+        end if;
+        if not b10hiddenyn.exists(i__) or b10hiddenyn(i__) is null then
+          b10hiddenyn(i__) := 'N';
+        end if;
+        null;
+      end loop;
+    end;
+    procedure post_submit is
+    begin
+      null;
+    end;
+    procedure psubmit is
+    begin
+      on_submit;
+      post_submit;
+    end;
+    procedure pclear_b10(pstart number) is
+      i__ pls_integer;
+      j__ pls_integer;
+      k__ pls_integer;
+    begin
+      i__ := pstart;
+      if 0 = 0 then
+        k__ := i__ + 2;
+      else
+        if i__ > 0 then
+          k__ := i__ + 2;
+        else
+          k__ := 2 + 0;
+        end if;
+      end if;
+      for j__ in i__ + 1 .. k__ loop
+        b10RS(j__) := null;
+        b10rid(j__) := null;
+        b10formid(j__) := null;
+        b10ELEMENTID(j__) := null;
+        b10orderby(j__) := null;
+        b10attribute(j__) := null;
+        b10type(j__) := null;
+        b10name(j__) := null;
+        b10value(j__) := null;
+        b10source(j__) := null;
+        b10hiddenyn(j__) := null;
+        b10RS(j__) := 'I';
+
+      end loop;
+    end;
+    procedure pclear_form is
+    begin
+      ACTION     := null;
+      LANG       := null;
+      PFORMID    := null;
+      PELEMENTID := null;
+      SPOROCILO  := null;
+      null;
+    end;
+    procedure pclear is
+    begin
+      pclear_form;
+      pclear_b10(0);
+      null;
+    end;
+    procedure pselect_b10 is
+      i__ pls_integer;
+    begin
+      b10RS.delete;
+      b10rid.delete;
+      b10formid.delete;
+      b10ELEMENTID.delete;
+      b10orderby.delete;
+      b10attribute.delete;
+      b10type.delete;
+      b10name.delete;
+      b10value.delete;
+      b10source.delete;
+      b10hiddenyn.delete;
+      --<pre_select formid="50015" blockid="b10">
+      --</pre_select>
+      declare
+        TYPE ctype__ is REF CURSOR;
+        c__ ctype__;
+      begin
+        OPEN c__ FOR
+        --<SQL formid="50015" blockid="b10">
+          SELECT ROWID rid,
+                 formid,
+                 ELEMENTID,
+                 orderby,
+                 upper(attribute) attribute,
+                 type,
+                 name,
+                 value,
+                 source,
+                 hiddenyn
+            FROM RASD_ATTRIBUTES
+           where formid = PFORMID
+             and elementid = pelementid
+             and type not in ('S', 'E','C')
+           order by orderby
+          --</SQL>
+          ;
+        i__ := 1;
+        LOOP
+          FETCH c__
+            INTO b10rid(i__),
+                 b10formid(i__),
+                 b10ELEMENTID(i__),
+                 b10orderby(i__),
+                 b10attribute(i__),
+                 b10type(i__),
+                 b10name(i__),
+                 b10value(i__),
+                 b10source(i__),
+                 b10hiddenyn(i__);
+          exit when c__%notfound;
+          if c__%rowcount >= 1 then
+            b10RS(i__) := null;
+            b10RS(i__) := 'U';
+
+            --<post_select formid="50015" blockid="b10">
+            --</post_select>
+            i__ := i__ + 1;
+          end if;
+        END LOOP;
+        if c__%rowcount < 1 then
+          b10RS.delete(1);
+          b10rid.delete(1);
+          b10formid.delete(1);
+          b10ELEMENTID.delete(1);
+          b10orderby.delete(1);
+          b10attribute.delete(1);
+          b10type.delete(1);
+          b10name.delete(1);
+          b10value.delete(1);
+          b10source.delete(1);
+          b10hiddenyn.delete(1);
+          i__ := 0;
+        end if;
+        CLOSE c__;
+      end;
+      pclear_b10(b10rid.count);
+      null;
+    end;
+    procedure pselect is
+    begin
+      if 1 = 1 then
+        pselect_b10;
+      end if;
+      null;
+    end;
+    procedure pcommit_b10 is
+      v_zaklepanje varchar2(4000);
+    begin
+      for i__ in 1 .. b10RS.count loop
+        --<on_validate formid="50015" blockid="b10">
+        --</on_validate>
+        if substr(b10RS(i__), 1, 1) = 'I' then
+          --INSERT
+          if b10orderby(i__) is not null or b10name(i__) is not null or
+             b10value(i__) is not null or b10source(i__) is not null then
+            --<pre_insert formid="50015" blockid="b10">
+            B10ELEMENTID(i__) := PELEMENTID;
+            B10formid(i__) := PFORMID;
+            B10source(i__) := nvl(B10source(i__), 'V');
+            if b10name(i__) is null then
+              B10attribute(i__) := 'V_';
+              B10type(i__) := 'V';
+            else
+              B10attribute(i__) := 'A_' || B10name(i__);
+              B10type(i__) := 'A';
+            end if;
+            --</pre_insert>
+            if b10orderby(i__) is null then
+              raise_application_error('-20001',
+                                      'Obvezen podatek ni vpisan!');
+            end if;
+            insert into RASD_ATTRIBUTES
+              (formid,
+               ELEMENTID,
+               orderby,
+               attribute,
+               type,
+               name,
+               value,
+               source,
+               hiddenyn)
+            values
+              (b10formid(i__),
+               b10ELEMENTID(i__),
+               b10orderby(i__),
+               upper(b10attribute(i__)),
+               b10type(i__),
+               b10name(i__),
+               b10value(i__),
+               'V' --b10source(i__)
+              ,
+               b10hiddenyn(i__));
+            --<post_insert formid="50015" blockid="b10">
+            --</post_insert>
+            null;
+          end if;
+          null;
+        else
+          -- UPDATE ali DELETE;
+
+          if b10orderby(i__) is null and b10name(i__) is null and
+             b10value(i__) is null then
+            --DELETE
+            --<pre_delete formid="50015" blockid="b10">
+            --</pre_delete>
+            delete RASD_ATTRIBUTES where ROWID = b10rid(i__);
+            --<post_delete formid="50015" blockid="b10">
+            --</post_delete>
+          else
+            --UPDATE
+            --<pre_update formid="50015" blockid="b10">
+            if b10name(i__) is null then
+              B10attribute(i__) := 'V_';
+              B10type(i__) := 'V';
+            else
+              B10attribute(i__) := 'A_' || upper(B10name(i__));
+              B10type(i__) := 'A';
+            end if;
+            --</pre_update>
+            if b10orderby(i__) is null then
+              raise_application_error('-20001',
+                                      'Obvezen podatek ni vpisan!');
+            end if;
+            update RASD_ATTRIBUTES
+               set orderby   = b10orderby(i__),
+                   attribute = b10attribute(i__),
+                   name      = b10name(i__),
+                   value     = b10value(i__),
+                   source    = b10source(i__),
+                   hiddenyn  = b10hiddenyn(i__)
+             where ROWID = b10rid(i__);
+            --<post_update formid="50015" blockid="b10">
+            --</post_update>
+            null;
+          end if;
+          null;
+        end if;
+        null;
+      end loop;
+      null;
+    end;
+    procedure pcommit is
+    begin
+      --<pre_commit formid="50015" blockid="">
+      --</pre_commit>
+      if 1 = 1 then
+        pcommit_b10;
+      end if;
+      --<post_commit formid="50015" blockid="">
+      --</post_commit>
+      null;
+    end;
+    procedure phtml is
+      ib10 pls_integer;
+      --povezavein
+      --SQL
+      --TEXT
+      procedure js_LOVREF(value varchar2, name varchar2 default null) is
+      begin
+        htp.p('<SCRIPT LANGUAGE="JavaScript">');
+        htp.p('js_LOVREF(''' || value || ''')');
+        htp.p('</SCRIPT>');
+      end;
+      --TF
+      procedure js_INPUT_CHECKBOX_DEF(value varchar2,
+                                      name  varchar2 default null) is
+      begin
+        if value = 'Y' then
+          htp.prn('Y" checked "');
+        else
+          htp.prn('Y');
+        end if;
+      end;
+      --SQL-T
+    begin
+      --js povezavein
+      --js SQL
+      --js TEXT
+      htp.p('<SCRIPT LANGUAGE="JavaScript">');
+      htp.p('function js_LOVREF(pvalue) {');
+      htp.p('  document.write(''<OPTION CLASS=selectp ''+ ((pvalue=='''')?''selected'':'''') +'' value=""> '')');
+      htp.p('  document.write(''<OPTION CLASS=selectp ''+ ((pvalue==''G'')?''selected'':'''') +'' value="G">' ||
+            RASDI_TRNSLT.text('Eng.', lang) || ' '')');
+      htp.p('  document.write(''<OPTION CLASS=selectp ''+ ((pvalue==''V'')?''selected'':'''') +'' value="V">' ||
+            RASDI_TRNSLT.text('Chng', lang) || ' '')');
+      htp.p('  document.write(''<OPTION CLASS=selectp ''+ ((pvalue==''R'')?''selected'':'''') +'' value="R">' ||
+            RASDI_TRNSLT.text('Ref.', lang) || ' '')');
+      htp.p('}');
+      htp.p('</SCRIPT>');
+      --js TF
+      htp.prn('<SCRIPT LANGUAGE="JavaScript">');
+      htp.p('</SCRIPT>');
+      htp.prn('<HTML>
+<HEAD>
+<META HTTP-EQUIV="Content-Type" CONTENT="text/html;CHARSET=WINDOWS-1250">
+<META HTTP-EQUIV="Pragma" CONTENT="no-cache"><META HTTP-EQUIV="Expires" CONTENT="-1">
+'||RASDC_LIBRARY.RASD_UI_Libs||'
+<TITLE>Attributes of element ' || pelement ||
+              '</TITLE>
+</HEAD>
+<BODY><FONT ID="RASDC_ATTRIBUTES_LAB">');
+      htp.prn('</FONT>
+<DIV CLASS="hint">
+<FORM NAME="RASDC_ATTRIBUTES" METHOD="post" ACTION="!rasdc_attributes.program">
+
+<P align="right">
+');
+if rasdc_library.allowEditing(pformid) then
+htp.p('
+<INPUT class="SUBMIT" type="submit" value="' ||
+              RASDI_TRNSLT.text('Save', lang) ||
+              '" name="ACTION">
+');
+end if;
+htp.p('
+<INPUT class="SUBMIT" type="reset" value="' ||
+              RASDI_TRNSLT.text('Reset', lang) ||
+              '" name="ACTION">
+<INPUT class="SUBMIT" type="button" value="' ||
+              RASDI_TRNSLT.text('Close', lang) ||
+              '" onclick="window.close();">
+</P>
+
+<INPUT NAME="LANG" TYPE="hidden" VALUE="' || LANG ||
+              '" CLASS="HIDDEN"><INPUT NAME="PFORMID" TYPE="hidden" VALUE="' ||
+              PFORMID ||
+              '" CLASS="HIDDEN"><INPUT NAME="PELEMENTID" TYPE="hidden" VALUE="' ||
+              PELEMENTID ||
+              '" CLASS="HIDDEN"><INPUT NAME="SPOROCILO" TYPE="hidden" VALUE="' ||
+              SPOROCILO ||
+              '" CLASS="HIDDEN">
+<TABLE BORDER="0">
+<CAPTION><FONT ID="B10_LAB"></FONT></CAPTION><TR>
+<TD class="label" align="center"><FONT ID="B10orderby_LAB">' ||
+              RASDI_TRNSLT.text('Order', lang) ||
+              '</FONT></TD>
+<TD class="label" align="center"><FONT ID="B10name_LAB" color="red">' ||
+              RASDI_TRNSLT.text('Attribute', lang) ||
+              '</FONT></TD>
+<TD class="label" align="center"><FONT ID="B10value_LAB" color="red">' ||
+              RASDI_TRNSLT.text('Value', lang) ||
+              '</FONT></TD>
+<TD class="label" align="center"><FONT ID="B10source_LAB">' ||
+              RASDI_TRNSLT.text('Source', lang) ||
+              '</FONT></TD>
+<TD class="label" align="center"><FONT ID="B10hiddenyn_LAB">' ||
+              RASDI_TRNSLT.text('Hidden', lang) || '</FONT></TD>
+<TD class="label" align="center"></TD>
+</TR>');
+      for ib10 in 1 .. b10RS.count loop
+        htp.prn('<TR ID="B10_BLOK" onmouseover="javascript:style.backgroundColor=''#E9E9E9''" onmouseout="javascript:style.backgroundColor=''#ffffff''"><INPUT NAME="B10RS_' || ib10 ||
+                '" TYPE="hidden" VALUE="' || b10RS(ib10) ||
+                '" CLASS="HIDDEN"><INPUT NAME="B10RID_' || ib10 ||
+                '" TYPE="hidden" VALUE="' || b10rid(ib10) ||
+                '" CLASS="HIDDEN"><INPUT NAME="B10formid_' || ib10 ||
+                '" TYPE="hidden" VALUE="' || b10formid(ib10) ||
+                '" CLASS="HIDDEN"><INPUT NAME="B10ELEMENTID_' || ib10 ||
+                '" TYPE="hidden" VALUE="' || b10ELEMENTID(ib10) ||
+                '" CLASS="HIDDEN">
+<TD><INPUT NAME="B10orderby_' || ib10 || '" VALUE="' ||
+                b10orderby(ib10) || '" CLASS="TEXT" maxLength="4" size="4"
+ TYPE="TEXT"></TD>
+<TD><INPUT NAME="B10name_' || ib10 || '" VALUE="' ||
+                b10name(ib10) || '" CLASS="TEXT" TYPE="TEXT"></TD>
+<TD><INPUT NAME="B10value_' || ib10 || '" VALUE="' ||
+                b10value(ib10) || '" CLASS="TEXT" TYPE="TEXT"></TD>
+<TD><SELECT NAME="B10source_' || ib10 ||
+                '" CLASS="SELECT">');
+        js_LOVREF(b10source(ib10), 'B10source_' || ib10 || '');
+        htp.prn('</SELECT></TD>
+<TD><INPUT NAME="B10hiddenyn_' || ib10 ||
+                '" TYPE="checkbox" VALUE="');
+        js_INPUT_CHECKBOX_DEF(b10hiddenyn(ib10),
+                              'B10hiddenyn_' || ib10 || '');
+        htp.prn('" CLASS="CHECKBOX"></TD>
+<TD>
+');
+        if b10orderby(ib10) is not null then
+          htp.prn('
+<img src="rasdc_files.showfile?pfile=pict/gumbrisi.jpg" border="0" alt="' ||
+                  RASDI_TRNSLT.text('Bri?i zapis', lang) || '"
+onClick="document.RASDC_ATTRIBUTES.B10orderby_' || iB10 ||
+                  '.value=''''; document.RASDC_ATTRIBUTES.B10name_' || iB10 ||
+                  '.value=''''; document.RASDC_ATTRIBUTES.B10value_' || iB10 ||
+                  '.value='''';">
+');
+        end if;
+        htp.prn('
+</TD>
+</TR>');
+      end loop;
+      htp.prn('</TABLE>
+<table width="100%" border="0"><tr>
+');
+      if SPOROCILO is not null then
+        htp.prn('
+<td width="1%" class="sporociloh" nowrap><FONT COLOR="green" size="4">' ||
+                RASDI_TRNSLT.text('Message', lang) ||
+                ': </FONT></td>
+<td class="sporocilom">' ||
+                RASDI_TRNSLT.text(sporocilo, lang) || '</td>
+');
+      end if;
+      htp.prn('
+<td  align="right">
+');
+if rasdc_library.allowEditing(pformid) then
+htp.p('
+<INPUT class="SUBMIT" type="submit" value="' ||
+              RASDI_TRNSLT.text('Save', lang) ||
+              '" name="ACTION">
+');
+end if;
+htp.p('
+<INPUT class="SUBMIT" type="reset" value="' ||
+              RASDI_TRNSLT.text('Reset', lang) ||
+              '" name="ACTION">
+<INPUT class="SUBMIT" type="button" value="' ||
+              RASDI_TRNSLT.text('Close', lang) || '" onclick="window.close();">
+</td>
+</tr>
+</table>
+</FORM></BODY>
+<SCRIPT LANGUAGE="JavaScript">
+ izpis_dna('''||rasdi_client.c_registerto||''');
+</SCRIPT>
+</HTML>
+    ');
+    exception
+      when others then
+        htp.p('<font color="red">' ||
+              replace(replace(sqlerrm,
+                              '
+',
+                              '\n'),
+                      '"',
+                      '\"') || '</font>');
+        htp.p('<script language="JavaScript">');
+        htp.p('<!--');
+        htp.p('  alert("' || replace(replace(sqlerrm,
+                                             '
+',
+                                             '\n'),
+                                     '"',
+                                     '\"') || '");');
+        htp.p('history.go(-1);');
+        htp.p('// -->');
+        htp.p('</script>');
+
+        null;
+    end;
+  begin
+    psubmit;
+    if ACTION = 'Back' then
+      pselect;
+      phtml;
+    elsif ACTION = 'Forward' then
+      pselect;
+      phtml;
+    elsif ACTION = 'Search' then
+      pselect;
+      phtml;
+    elsif ACTION = 'Save' then
+      pcommit;
+      pselect;
+      phtml;
+    elsif ACTION = 'Clear' then
+      pclear;
+      phtml;
+    else
+      pselect;
+      phtml;
+    end if;
+
+  exception
+    when rasdi_client.e_finished then
+      null;
+    when others then
+      htp.p('<script language="JavaScript">');
+      htp.p('<!--');
+      htp.p('  alert("' || replace(replace(sqlerrm,
+                                           '
+',
+                                           '\n'),
+                                   '"',
+                                   '\"') || '");');
+      htp.p('history.go(-1);');
+      htp.p('// -->');
+      htp.p('</script>');
+
+  end;
+end RASDC_ATTRIBUTES;
+/
+

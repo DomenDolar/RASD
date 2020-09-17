@@ -1,0 +1,147 @@
+Creating ORDS on Linux (cloud) to connect Oracle Autonomous Database
+
+
+1. Download SW and install it in remote Linux server
+-- LOCAL MACHINE
+Downloads:
+
+https://www.oracle.com/database/technologies/instant-client/linux-x86-64-downloads.html
+https://www.oracle.com/database/technologies/appdev/rest-data-services-v192-downloads.html
+https://www.oracle.com/technetwork/java/javase/downloads/jce8-download-2133166.html
+
+C:\dockeru01
+jre-8u151-linux-x64.tar.gz
+jce_policy-8.zip  -->> the content of this zip is in jre /lib/security/policy/unlimited/
+ords-19.1.0.092.1545.zip
+instantclient-basic-linux.x64-19.3.0.0.0dbru.zip
+instantclient-sqlplus-linux.x64-19.3.0.0.0dbru.zip
+wallet_YOUR_DATABASE.zip 
+
+-- Connect to remote linux server - Use Putty (SSH)
+local folder is /home/opc/
+>mkdir u01
+>cd u01
+>mkdir ords
+>mkdir wallet_YOUR_DATABASE
+>cd ords
+>mkdir conf
+---------------------
+
+-- COPY DOCUMENTS TO Instance Oracle Cloud
+pscp -i your.ppk jre-8u151-linux-x64.tar.gz     your_linux_location:/home/opc/u01/jre-8u151-linux-x64.tar.gz
+pscp -i your.ppk ords-19.2.0.199.1647.zip       your_linux_location:/home/opc/u01/ords/ords-19.2.0.199.1647.zip
+pscp -i your.ppk instantclient-basic-linux.x64-19.3.0.0.0dbru.zip your_linux_location:/home/opc/u01/instantclient-basic-linux.x64-19.3.0.0.0dbru.zip
+pscp -i your.ppk instantclient-sqlplus-linux.x64-19.3.0.0.0dbru.zip your_linux_location:/home/opc/u01/instantclient-sqlplus-linux.x64-19.3.0.0.0dbru.zip
+pscp -i your.ppk wallet_YOUR_DATABASE.zip   your_linux_location:/home/opc/u01/wallet_RASD/wallet_RASD.zip
+pscp -i your.ppk ords_conf.zip   your_linux_location:/home/opc/u01/ords/ords_conf.zip
+pscp -i your.ppk oracle.dbtools.jdbcrest-0.1.0.249.0854.jar   your_linux_location:/home/opc/u01/oracle.dbtools.jdbcrest-0.1.0.249.0854.jar
+
+---------------------
+
+-- Connect to remote linux server your_linux_location - Use Putty (SSH)
+local folder is /home/opc/
+-- prepare SW
+>cd u01
+>tar xvzf jre-8u151-linux-x64.tar.gz
+>cp jre1.8.0_151/lib/security/policy/unlimited/. jre1.8.0_151/lib/security/
+>unzip instantclient-basic-linux.x64-19.3.0.0.0dbru.zip
+>unzip instantclient-sqlplus-linux.x64-19.3.0.0.0dbru.zip
+>cd wallet_YOUR_DATABASE
+>unzip wallet_YOUR_DATABASE.zip
+> cd ..
+> cd ords
+> mkdir ords-19.2
+> cd ords-19.2
+> unzip ../ords-19.2.0.199.1647.zip
+> cd ..
+> cd conf
+> unzip ../ords_conf.zip
+> cd
+> cd u01
+> cd instantclient_19_3 
+> cp /home/opc/wallet_RASD/*
+> vi sqlnet.ora -- CHANGE WALLET LOCATION TO /home/opc/u01/instantclient_19_3
+-- prepare ENV
+export ORACLE_HOME=/home/opc/u01/instantclient_19_3
+export TNS_ADMIN=/home/opc/u01/instantclient_19_3
+export LD_LIBRARY_PATH="$ORACLE_HOME"
+export PATH="$ORACLE_HOME:$PATH"
+export PATH=/home/opc/u01/jre1.8.0_151/bin/:$PATH
+--
+
+2. Setting  ORDS
+-- set config location settings
+>/home/opc/u01/jre1.8.0_151/bin/java -Duser.timezone="+2:00" -jar /home/opc/u01/ords/ords-19.2/ords.war configdir /home/opc/u01/ords/conf/
+
+-- change default port for standalone : if you set ports under 1024 you must run ords as root (sudo su)
+> cd /home/opc/u01/ords/conf/ords/standalone/
+> vi standalone.properties
+
+-- change database conneection to YOUR_DATABASE
+> cd /home/opc/u01/ords/conf/ords/
+> vi defaults.xml
+
+<entry key="db.connectionType">customurl</entry>
+<entry key="db.customURL">jdbc:oracle:thin:@YOUR_DATABASE_medium?TNS_ADMIN=/home/opc/u01/wallet_YOUR_DATABASE</entry>
+<entry key="jdbc.DriverType">thin</entry>
+<entry key="security.verifySSL">true</entry>
+
+
+3. Running ORDS
+
+/home/opc/u01/jre1.8.0_151/bin/java -Duser.timezone="+2:00" -jar /home/opc/u01/ords/ords-19.2/ords.war standalone
+
+4. Accesing custom  port (8080) on Instance Oracle Cloud - information
+https://oracle-base.com/articles/vm/oracle-cloud-infrastructure-oci-amend-firewall-rules
+https://www.cyberciti.biz/faq/unix-linux-check-if-port-is-in-use-command/
+https://community.oracle.com/message/14449317#14449317
+
+
+>sudo su
+>firewall-cmd --permanent --zone=public --add-port=8080/tcp
+>firewall-cmd --reload
+>sudo lsof -i -P -n | grep LISTEN
+
+
+5. Add cron to restart ords daily
+
+cretae file oracle-xe in /etc/cron.daily and go to dir /etc/cron.daily
+>sudo su
+>cd /etc/cron.daily/
+>vi oracle-cow
+--copy text--
+#/bin/sh
+
+export ORACLE_HOME=/home/opc/u01/instantclient_19_3
+export TNS_ADMIN=/home/opc/u01/instantclient_19_3
+export LD_LIBRARY_PATH="$ORACLE_HOME"
+export PATH="$ORACLE_HOME:$PATH"
+export PATH=/home/opc/u01/jre1.8.0_151/bin/:$PATH
+
+java -Duser.timezone="+2:00" -jar /home/opc/u01/ords/ords-19.2/ords.war standalone &
+--
+
+add permissions
+>chmod 777 oracle-cow
+>exit
+run crontab
+>crontab -e
+--copy text--
+10 7 * * * /etc/cron.daily/oracle-cow
+--
+
+run cron
+>cron
+
+> exit
+---		  
+
+
+Test ORDS 
+http://127.0.0.1:88/ords/your_app_schema/!welcome.webclient
+
+
+
+
+
+

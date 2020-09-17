@@ -1,0 +1,755 @@
+create or replace package rasdc_sqlclient is
+  /*
+  // +----------------------------------------------------------------------+
+  // | RASD - Rapid Application Service Development                         |
+  // +----------------------------------------------------------------------+
+  // | Copyright (C) 2014       http://rasd.sourceforge.net                 |
+  // +----------------------------------------------------------------------+
+  // | This program is free software; you can redistribute it and/or modify |
+  // | it under the terms of the GNU General Public License as published by |
+  // | the Free Software Foundation; either version 2 of the License, or    |
+  // | (at your option) any later version.                                  |
+  // |                                                                      |
+  // | This program is distributed in the hope that it will be useful       |
+  // | but WITHOUT ANY WARRANTY; without even the implied warranty of       |
+  // | MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the         |
+  // | GNU General Public License for more details.                         |
+  // +----------------------------------------------------------------------+
+  // | Author: Domen Dolar       <domendolar@users.sourceforge.net>         |
+  // +----------------------------------------------------------------------+
+  */
+  function version(p_log out varchar2) return varchar2;
+  function metadata return clob;
+  procedure webclient(name_array in owa.vc_arr, value_array in owa.vc_arr);
+end;
+/
+
+create or replace package body RASDC_SQLCLIENT is
+  /*
+  // +----------------------------------------------------------------------+
+  // | RASD - Rapid Application Service Development                         |
+  // +----------------------------------------------------------------------+
+  // | Copyright (C) 2014       http://rasd.sourceforge.net                 |
+  // +----------------------------------------------------------------------+
+  // | This program is free software; you can redistribute it and/or modify |
+  // | it under the terms of the GNU General Public License as published by |
+  // | the Free Software Foundation; either version 2 of the License, or    |
+  // | (at your option) any later version.                                  |
+  // |                                                                      |
+  // | This program is distributed in the hope that it will be useful       |
+  // | but WITHOUT ANY WARRANTY; without even the implied warranty of       |
+  // | MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the         |
+  // | GNU General Public License for more details.                         |
+  // +----------------------------------------------------------------------+
+  // | Author: Domen Dolar       <domendolar@users.sourceforge.net>         |
+  // +----------------------------------------------------------------------+
+  */
+
+  type rtab is table of rowid index by binary_integer;
+  type ntab is table of number index by binary_integer;
+  type dtab is table of date index by binary_integer;
+  type ctab is table of varchar2(4000) index by binary_integer;
+  type itab is table of pls_integer index by binary_integer;
+
+  function version(p_log out varchar2) return varchar2 is
+  begin
+    p_log := '/* Change LOG:
+20171219 - Changed SQL execution. Now uses local package EXECUTESQL
+20171212 - Added SQL logging, ...    
+20160310 - Included CodeMirror         
+20141027 - Added footer on all pages
+*/';
+    return 'v.1.1.20160310225530';
+
+  end;
+
+  function metadata return clob is
+    v_clob clob := ' ';
+  begin
+    return v_clob;
+  end;
+  procedure webclient(name_array in owa.vc_arr, value_array in owa.vc_arr) is
+    --PRAGMA AUTONOMOUS_TRANSACTION;
+          verr     varchar2(1000); 
+NSELECT number := 0;
+nxxx number := 0;
+    PAGE         number := 0;
+    GBUTTONRES   varchar2(4000) := 'Reset';
+    GBUTTONSRC   varchar2(4000) := 'Submit';
+    PFORMID      varchar2(4000);
+    LANG         varchar2(4000);
+    ACTION       varchar2(4000);
+    B10TEXTAREA  ctab;
+    B10BUFFER    ctab;
+    B30RESULT    ctab;
+    B30SPOROCILO ctab;
+    procedure on_submit is
+      num_entries number := name_array.count;
+      v_max       pls_integer := 0;
+    begin
+      -- submit fields
+      for i__ in 1 .. nvl(num_entries, 0) loop
+        if 1 = 2 then
+          null;
+        elsif upper(name_array(i__)) = upper('NSELECT') then
+          NSELECT := rasdi_client.varchr2number(value_array(i__));
+        elsif upper(name_array(i__)) = upper('PAGE') then
+          PAGE := rasdi_client.varchr2number(value_array(i__));
+        elsif upper(name_array(i__)) = upper('LANG') then
+          LANG := value_array(i__);
+        elsif upper(name_array(i__)) = upper('PFORMID') then
+          PFORMID := value_array(i__);
+        elsif upper(name_array(i__)) = upper('GBUTTONRES') then
+          GBUTTONRES := value_array(i__);
+        elsif upper(name_array(i__)) = upper('GBUTTONSRC') then
+          GBUTTONSRC := value_array(i__);
+        elsif upper(name_array(i__)) = upper('ACTION') then
+          ACTION := value_array(i__);
+        elsif upper(name_array(i__)) =
+              upper('B10TEXTAREA_' ||
+                    substr(name_array(i__),
+                           instr(name_array(i__), '_', -1) + 1)) then
+          B10TEXTAREA(to_number(substr(name_array(i__), instr(name_array(i__), '_', -1) + 1))) := value_array(i__);
+        elsif upper(name_array(i__)) =
+              upper('B10BUFFER_' ||
+                    substr(name_array(i__),
+                           instr(name_array(i__), '_', -1) + 1)) then
+          B10BUFFER(to_number(substr(name_array(i__), instr(name_array(i__), '_', -1) + 1))) := value_array(i__);
+        elsif upper(name_array(i__)) =
+              upper('B30RESULT_' ||
+                    substr(name_array(i__),
+                           instr(name_array(i__), '_', -1) + 1)) then
+          B30RESULT(to_number(substr(name_array(i__), instr(name_array(i__), '_', -1) + 1))) := value_array(i__);
+        elsif upper(name_array(i__)) =
+              upper('B30SPOROCILO_' ||
+                    substr(name_array(i__),
+                           instr(name_array(i__), '_', -1) + 1)) then
+          B30SPOROCILO(to_number(substr(name_array(i__), instr(name_array(i__), '_', -1) + 1))) := value_array(i__);
+        end if;
+      end loop;
+      -- init fields
+      v_max := 0;
+      if B10TEXTAREA.count > v_max then
+        v_max := B10TEXTAREA.count;
+      end if;
+      if B10BUFFER.count > v_max then
+        v_max := B10BUFFER.count;
+      end if;
+      if v_max = 0 then
+        v_max := 1;
+      end if;
+      for i__ in 1 .. v_max loop
+        if not B10TEXTAREA.exists(i__) then
+          B10TEXTAREA(i__) := null;
+        end if;
+        if not B10BUFFER.exists(i__) then
+          B10BUFFER(i__) := null;
+        end if;
+        null;
+      end loop;
+      v_max := 0;
+      if B30RESULT.count > v_max then
+        v_max := B30RESULT.count;
+      end if;
+      if B30SPOROCILO.count > v_max then
+        v_max := B30SPOROCILO.count;
+      end if;
+      if v_max = 0 then
+        v_max := 1;
+      end if;
+      for i__ in 1 .. v_max loop
+        if not B30RESULT.exists(i__) then
+          B30RESULT(i__) := null;
+        end if;
+        if not B30SPOROCILO.exists(i__) then
+          B30SPOROCILO(i__) := null;
+        end if;
+        null;
+      end loop;
+    end;
+    procedure post_submit is
+    begin
+      --<POST_SUBMIT formid="8" blockid="">
+      if b10textarea(1) is not null then
+
+          if instr(upper(b10textarea(1)), 'DESCR') = 1 then
+            b10textarea(1) := 'select column_name, data_type,data_length, decode(nullable,''N'',''NOT NULL'','''')
+                               from user_tab_cols t
+                               where table_name = ''' ||
+                               upper(ltrim(rtrim(substr(b10textarea(1), 6)))) || '''';
+          end if;
+
+
+--check exists of EXECUTESQL
+    declare
+      n number;
+    begin  
+        select count(*) into nxxx from all_objects o where o.object_name = 'EXECUTESQL' and o.object_type = 'PACKAGE' and o.owner = user;
+        
+   
+        
+        if nxxx = 0 then 
+            b30sporocilo(1) := '<FONT color=red>Package EXECUTESQL missing in your schema ('||user||'). Compile form EXECUTESQL on your schema (select form from suported RASD application form list) and run it to execute grants.</FONT>';
+        else
+          execute immediate 
+'
+declare ns number; ni number; nd number; nu number; ve varchar2(1000); vret varchar2(1000); 
+begin 
+   :1 := '||user||'.EXECUTESQL.run(:2, :3); 
+end;
+'
+using out verr, in b10textarea(1), out n
+;           
+          if verr is not null then
+                        b30sporocilo(1) := '<FONT color=red>Logged user: '||user||':' || verr || '</FONT>';   
+          else              
+             if instr(upper(b10textarea(1)), 'SELECT') > 0 then 
+                 b30sporocilo(1) := 'Only first 100 rows are shown.';
+             else
+               if instr(upper(b10textarea(1)), 'UPDATE') > 0 then 
+                  b30sporocilo(1) := '' || n || ' rows were updated.';
+               elsif instr(upper(b10textarea(1)), 'INSERT') > 0 then 
+                  b30sporocilo(1) := '' || n || ' rows were inserted.';               
+                elsif instr(upper(b10textarea(1)), 'DELETE') > 0 then 
+                  b30sporocilo(1) := '' || n || ' rows were deleted.'; 
+                else  
+                  b30sporocilo(1) := '' || n || ' rows were efected.';                   
+                end if;                  
+             end if;                              
+          end if;
+
+                                 
+        end if;     
+    
+    end;
+-----------    
+        -- IN SQL, LANG
+        -- OUT MESSAGE, NUMBER , 
+/*        
+        declare
+          cid     pls_integer;
+          n       pls_integer;
+          ninsert number;
+          ndelete number;
+          nupdate number;
+        begin
+          cid := dbms_sql.open_cursor;
+          dbms_sql.parse(cid, b10textarea(1), dbms_sql.native);
+          n := dbms_sql.execute(cid);
+          if n >= 0 then
+            nselect := instr(upper(b10textarea(1)), 'SELECT');
+            ninsert := instr(upper(b10textarea(1)), 'INSERT');
+            nupdate := instr(upper(b10textarea(1)), 'UPDATE');
+            ndelete := instr(upper(b10textarea(1)), 'DELETE');
+            if nselect = 1 then
+              -- PLSQL CODE run on UI
+              b30sporocilo(1) := 'Only first 100 rows are shown.';
+            elsif ninsert = 1 then
+              b30sporocilo(1) := '' || n || ' rows were inserted.';
+            elsif ndelete = 1 then
+              b30sporocilo(1) := '' || n || ' rows were deleted.';
+            elsif nupdate = 1 then
+              b30sporocilo(1) := '' || n || ' rows were updated.';
+            end if;
+          end if;
+        exception
+          when others then
+            b30sporocilo(1) := '<FONT color=red>Logged user: '||user||':' || sqlerrm || '</FONT>';
+        end;
+*/
+          b10buffer(1) := b10textarea(1) || '
+;
+' || b10buffer(1);
+
+      end if;
+
+      --</POST_SUBMIT>
+    end;
+    procedure psubmit is
+    begin
+      on_submit;
+      post_submit;
+    end;
+    procedure pclear_B10(pstart number) is
+      i__ pls_integer;
+      j__ pls_integer;
+      k__ pls_integer;
+    begin
+      i__ := pstart;
+      if 1 = 0 then
+        k__ := i__ + 0;
+      else
+        if i__ > 1 then
+          k__ := i__ + 0;
+        else
+          k__ := 0 + 1;
+        end if;
+      end if;
+      for j__ in i__ + 1 .. k__ loop
+        B10TEXTAREA(j__) := null;
+        B10BUFFER(j__) := null;
+
+      end loop;
+    end;
+    procedure pclear_B30(pstart number) is
+      i__ pls_integer;
+      j__ pls_integer;
+      k__ pls_integer;
+    begin
+      i__ := pstart;
+      if 1 = 0 then
+        k__ := i__ + 0;
+      else
+        if i__ > 1 then
+          k__ := i__ + 0;
+        else
+          k__ := 0 + 1;
+        end if;
+      end if;
+      for j__ in i__ + 1 .. k__ loop
+        B30RESULT(j__) := null;
+        B30SPOROCILO(j__) := null;
+
+      end loop;
+    end;
+    procedure pclear_form is
+    begin
+      NSELECT    := 0;
+      PAGE       := 0;
+      GBUTTONRES := 'Reset';
+      GBUTTONSRC := 'Submit';
+      ACTION     := null;
+      null;
+    end;
+    procedure pclear is
+    begin
+      pclear_form;
+      pclear_B10(0);
+      pclear_B30(0);
+      null;
+    end;
+    procedure pselect_B10 is
+      i__ pls_integer;
+    begin
+      pclear_B10(B10TEXTAREA.count);
+      null;
+    end;
+    procedure pselect_B30 is
+      i__ pls_integer;
+    begin
+      pclear_B30(B30RESULT.count);
+      null;
+    end;
+    procedure pselect is
+    begin
+      if nvl(PAGE, 0) = 0 then
+        pselect_B10;
+      end if;
+      if nvl(PAGE, 0) = 0 then
+        pselect_B30;
+      end if;
+      null;
+    end;
+    procedure pcommit_B10 is
+      v_locking varchar2(4000);
+    begin
+      for i__ in 1 .. B10TEXTAREA.count loop
+        --<on_validate formid="8" blockid="B10">
+        --</on_validate>
+        null;
+      end loop;
+      null;
+    end;
+    procedure pcommit_B30 is
+      v_locking varchar2(4000);
+    begin
+      for i__ in 1 .. B30RESULT.count loop
+        --<on_validate formid="8" blockid="B30">
+        --</on_validate>
+        null;
+      end loop;
+      null;
+    end;
+    procedure pcommit is
+    begin
+      --<pre_commit formid="8" blockid="">
+      --</pre_commit>
+      if nvl(PAGE, 0) = 0 then
+        pcommit_B10;
+      end if;
+      if nvl(PAGE, 0) = 0 then
+        pcommit_B30;
+      end if;
+      --<post_commit formid="8" blockid="">
+      --</post_commit>
+      null;
+    end;
+    procedure poutput is
+    begin
+      htp.prn('<html>
+<HEAD>
+<META HTTP-EQUIV="Content-Type" CONTENT="text/html;CHARSET=WINDOWS-1250">
+<META HTTP-EQUIV="Pragma" CONTENT="no-cache"><META HTTP-EQUIV="Expires" CONTENT="-1">
+'||RASDC_LIBRARY.RASD_UI_Libs||'
+
+ 
+  <script>
+  $( function() {
+    $( "#sqlresults_form" ).dialog({
+          height: "auto",
+           width: 1000
+    }
+    );
+  } );
+  </script>
+
+</HEAD>
+<body>
+<FONT ID="RASDC_CSSJS_LAB">');
+      RASDC_LIBRARY.showhead('RASDC_SQLCLIENT',
+                                PFORMID,
+                                rasdi_client.secGetUsername,
+                                lang);
+      htp.prn('</FONT>
+<form name="RASDC_SQLCLIENT" method="post" action="!rasdc_sqlclient.webclient">
+<input name="PAGE" type="hidden" value="' || to_char(PAGE) || '">
+<input name="ACTION" type="hidden" value="' || ACTION || '">
+<INPUT NAME="LANG" TYPE="HIDDEN" VALUE="' || lang ||
+              '" CLASS="HIDDEN">
+<INPUT NAME="PFORMID" TYPE="HIDDEN" VALUE="' || PFORMID ||
+              '" CLASS="HIDDEN">
+<P align="right">
+<input class="SUBMIT" onclick="if (window.editor.getValue().length > 0) {localStorage.setItem(window.editor.getValue(), ''SQL'||pformid||''');} ACTION.value=this.value; submit();" name="GBUTTONSRC" type="BUTTON" value="' ||
+              GBUTTONSRC || '">
+<input class="SUBMIT" name="GBUTTONRES" type="reset" value="' ||
+              GBUTTONRES || '" >
+</P>
+
+');
+
+      htp.p('
+<TABLE BORDER="0"  width="100%"
+>
+<tr>
+<td ></td>
+<td ><span id="B10TEXTAREA_LAB">SQL 
+<img src="rasdc_files.showfile?pfile=pict/gumbrisi.jpg" border="0" title="Clear SQL" 
+ onclick=" window.editor.setValue('''') ; ">
+</span></td>
+<td><span id="B10BUFFER_LAB">History
+<img src="rasdc_files.showfile?pfile=pict/gumbrisi.jpg" border="0" title="Clear History" 
+ onclick=" getElementById(''B10BUFFER_1'').value='''' ; localStorage.clear();">
+</span></td></tr><tr id="B10_BLOCK">
+<td width="300px" valign="top">
+<FONT SIZE="1">
+');
+      for r__ in (
+         /*
+                  select /*+ RULE/ OBJECT_NAME id,
+                          OBJECT_NAME || ' ... ' || substr(object_type, 1, 1) label,
+                          2 x, o.owner
+                    from all_objects o
+                   where object_type in ('TABLE', 'VIEW')
+                     and (owner = rasdc_library.currentDADUser)
+                  union
+                  select /*+ RULE/ distinct SYNONYM_NAME id,
+                                   SYNONYM_NAME || ' ... S' label,
+                                   2 x, s.table_owner
+                    from user_synonyms s, all_tab_columns tc
+                   where s.table_name = tc.table_name
+                     and s.table_owner = tc.owner
+                     --and (s.owner = rasdc_library.currentDADUser)
+                   union
+                   select distinct owner||'.'||table_name id,
+                          owner||'.'||table_name  /*|| ' ... ' || substr(type, 1, 1)/ label, 2 x, x.owner
+                   from dba_tab_privs x 
+                   where --type in ('TABLE', 'VIEW') and 
+                    grantee = rasdc_library.currentDADUser 
+                    and 1=2 
+                   order by 4, 1
+                   */
+
+
+      
+                  select /*+ RULE*/ owner ,OBJECT_NAME id,
+                          OBJECT_NAME || ' ... ' || substr(object_type, 1, 1) label,
+                          2 x
+                    from all_objects
+                   where object_type in ('TABLE', 'VIEW')
+                     and (owner = rasdc_library.currentDADUser)
+                  union
+                  select /*+ RULE*/ distinct table_owner , SYNONYM_NAME id,
+                                   SYNONYM_NAME || ' ... S' label,
+                                   2 x
+                    from user_synonyms s, all_tab_columns tc
+                   where s.table_name = tc.table_name
+                     and s.table_owner = tc.owner
+                     --and (s.owner = rasdc_library.currentDADUser)
+                   union
+                   select distinct owner , table_name id,
+                          owner||'.'||table_name  /*|| ' ... ' || substr(type, 1, 1) */ label, 2 x
+                   from dba_tab_privs x 
+                   where --type in ('TABLE', 'VIEW') and
+                    grantee = rasdc_library.currentDADUser                     
+                   order by 1, 2                   
+                  ) loop
+
+htp.p(r__.owner||'.'||r__.id||'&nbsp;');
+
+htp.p('<A href="javascript: window.editor.setValue(''SELECT \n');
+for r_1_ in ( 
+select * from all_tab_columns x where x.owner = r__.owner and x.table_name =  r__.id 
+order by x.column_id
+) loop
+  if r_1_.column_id = 1 then 
+htp.p(' '||r_1_.column_name||'\n');    
+  else
+htp.p(','||r_1_.column_name||'\n');
+  end if;
+
+end loop;
+  
+htp.p('FROM '||r__.owner||'.'||r__.id||' \nWHERE 1=2 \nORDER BY 1'') ;">S</A>');
+
+
+htp.p('<A href="javascript: window.editor.setValue(''INSERT INTO '||r__.owner||'.'||r__.id||' \n');
+htp.p('(\n');
+for r_1_ in ( 
+select * from all_tab_columns x where x.owner = r__.owner and x.table_name =  r__.id 
+order by x.column_id
+) loop
+  if r_1_.column_id = 1 then 
+htp.p(' '||r_1_.column_name||'\n');    
+  else
+htp.p(','||r_1_.column_name||'\n');
+  end if;
+end loop;
+htp.p(') VALUES (\n');  
+for r_1_ in ( 
+select * from all_tab_columns x where x.owner = r__.owner and x.table_name =  r__.id 
+order by x.column_id
+) loop
+  if r_1_.column_id = 1 then 
+htp.p(' '||r_1_.column_name||'\n');    
+  else
+htp.p(','||r_1_.column_name||'\n');
+  end if;
+end loop;
+htp.p(')\n'') ;">I</A>');
+
+
+htp.p('<A href="javascript: window.editor.setValue(''UPDATE '||r__.owner||'.'||r__.id||' SET\n');
+for r_1_ in ( 
+select * from all_tab_columns x where x.owner = r__.owner and x.table_name =  r__.id 
+order by x.column_id
+) loop
+  if r_1_.column_id = 1 then 
+htp.p(' '||r_1_.column_name||' = '||r_1_.column_name||'\n');    
+  else
+htp.p(','||r_1_.column_name||' ='||r_1_.column_name||'\n');
+  end if;
+
+end loop;
+  
+htp.p('WHERE 1=2 '') ;">U</A>');
+
+
+htp.p('<A href="javascript: window.editor.setValue(''DELETE '||r__.owner||'.'||r__.id||' \n');
+htp.p('WHERE 1=2 '') ;">D</A>');
+
+htp.p('</BR>');
+
+     end loop;
+
+htp.p('</BR>');
+htp.p('</BR>');
+htp.p('<A href="javascript: window.editor.setValue(''CREATE TABLE '||user||'.MY_TABLE (MY_COL VARCHAR2(10)) \n');
+htp.p(' '') ;">Create Table</A>');
+
+htp.p('
+</font>
+</td>
+<td valign="top"><textarea name="B10TEXTAREA_1" id="B10TEXTAREA_1" rows="25" cols="80" class="textarea">' ||
+            B10TEXTAREA(1) ||
+            '</textarea></td>
+<td valign="top"><textarea name="B10BUFFER_1" id="B10BUFFER_1" rows="25" class="textarea">' ||
+            B10BUFFER(1) || '</textarea></td></tr></table>
+
+');
+
+if length(b10textarea(1)) > 0 then
+ 
+htp.p('<div id="sqlresults_form" title="Results">
+<table border="0" id="B30_TABLE">
+<tr>
+<td><PLSQL ID="B30RESULT_1" CLASS="FONT">');
+
+     if instr(upper(b10textarea(1)), 'SELECT') > 0 and verr is null and nxxx > 0 then
+ 
+         execute immediate 'begin  '||user||'.EXECUTESQL.output(:sql,:lang); end;'
+         using in b10textarea(1), in lang
+         ;
+       
+/*
+        declare
+          cid1 pls_integer;
+        begin
+          cid1 := owa_util.bind_variables(b10textarea(1));
+          
+          htp.p('<div class="sqlresults"><table>');
+          owa_util.cellsprint(cid1, 100);
+          htp.p('</table></div>');
+          
+          b30sporocilo(1) := 'Only first 100 rows are shown.';
+       end;
+*/
+    end if;
+      htp.prn('</PLSQL></td></tr><tr>
+<td></br><FONT ID="B30SPOROCILO_1" CLASS="FONT">' ||
+              B30SPOROCILO(1) || '</FONT></td>
+</tr></table>
+</div>');
+  
+end if;
+htp.p('
+ <script>
+window.onload = function() {
+  var mime = ''text/x-sql'';
+  // get mime type
+  if (window.location.href.indexOf(''mime='') > -1) {
+    mime = window.location.href.substr(window.location.href.indexOf(''mime='') + 5);
+  }
+  window.editor = CodeMirror.fromTextArea(document.getElementById(''B10TEXTAREA_1''), {
+    mode: mime,
+    indentWithTabs: true,
+    smartIndent: true,
+    lineNumbers: true,
+    matchBrackets : true,
+    autofocus: true,
+    extraKeys: {"Ctrl-Space": "autocomplete"},
+    hintOptions: {tables: {
+      __RASD_TABLES: {},
+');
+      for r__ in (
+                  select /*+ RULE*/ OBJECT_NAME id,
+                         OBJECT_NAME || ' ... ' || substr(object_type, 1, 1) label,
+                          2 x, o.owner
+                    from all_objects o
+                   where object_type in ('TABLE', 'VIEW')
+                     and (owner = rasdc_library.currentDADUser)
+                  union
+                  select /*+ RULE*/ distinct SYNONYM_NAME id,
+                                   SYNONYM_NAME || ' ... S' label,
+                                   2 x, s.table_owner
+                    from user_synonyms s, all_tab_columns tc
+                   where s.table_name = tc.table_name
+                     and s.table_owner = tc.owner
+                     --and (s.owner = rasdc_library.currentDADUser)
+                   union
+                   select distinct owner||'.'||table_name id,
+                          owner||'.'||table_name  /*|| ' ... ' || substr(type, 1, 1)*/ label, 2 x, x.owner
+                   from dba_tab_privs x 
+                   where --type in ('TABLE', 'VIEW') and 
+                    grantee = rasdc_library.currentDADUser 
+                    and 1=2 
+                   order by 3, 1
+                  ) loop
+htp.p('      '||r__.id||': {');  
+          for r1 in (select * from all_tab_columns t where t.table_name = r__.id and t.owner = r__.owner and column_name not like '%#%') loop
+htp.p(r1.column_name||' :{}, ');            
+          end loop;  
+          htp.p('null :{} },');
+      end loop;
+htp.p('      
+      __OTHER_FUNCTIONS: {}      
+    }}
+  });
+  window.editor.setSize("700","450");
+  
+};
+
+
+   $(function() {
+ 
+   if (localStorage.length > 0 && '||nvl(length(B10BUFFER(1)),0)||' == 0) {
+
+
+$(''B10BUFFER_1'').value=''cccc'';
+var buf_val = '''';  
+for(var i =0; i < localStorage.length; i++){
+   buf_val = localStorage.key(i) + ''\n;\n'' + buf_val;   
+ //  console.log(localStorage.key(i));
+ //  console.log(localStorage.getItem(localStorage.key(i)));
+}
+
+$(''#B10BUFFER_1'').val(buf_val);
+
+  }
+ 
+ 
+   });
+
+
+</script>
+
+
+');
+
+      htp.prn('
+
+<P align="right">
+<input class="SUBMIT" onclick="ACTION.value=this.value; submit();" name="GBUTTONSRC" type="BUTTON" value="' ||
+              GBUTTONSRC || '">
+<input class="SUBMIT" name="GBUTTONRES" type="reset" value="' ||
+              GBUTTONRES || '" >
+</P>
+</form>
+<SCRIPT LANGUAGE="JavaScript">
+ izpis_dna('''||rasdi_client.c_registerto||''');
+
+
+
+  
+</SCRIPT>
+</body>
+</html>
+    ');
+
+      null;
+    end;
+  begin
+    psubmit;
+    RASDC_LIBRARY.checkprivileges(PFORMID);
+
+    if 1 = 2 then
+      null;
+    elsif ACTION = GBUTTONSRC then
+      pselect;
+      poutput;
+    end if;
+
+    if ACTION is null or ACTION not in (GBUTTONSRC) then
+
+      pselect;
+      poutput;
+
+    end if;
+
+  exception
+    when rasdi_client.e_finished then
+      null;
+    when others then
+      htp.prn('<html><head>
+<meta http-equiv="content-type" content="text/html; charset=WINDOWS-1250">
+<meta http-equiv="pragma" content="no-cache">
+<meta http-equiv="expires" content="-1"><meta name="DESCRIPTION" content="description of the site"><meta name="KEYWORDS" content="keywords of the site">
+<title></title>
+'||RASDC_LIBRARY.RASD_UI_Libs||'
+</head><body><div class="htmlerror"><div class="htmlerrorcode">' ||
+              sqlcode || '</div><div class="htmlerrortext">' || sqlerrm ||
+              '</div></body><html>
+    ');
+  end;
+end RASDC_SQLCLIENT;
+/
+
