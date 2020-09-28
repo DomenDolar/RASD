@@ -23,7 +23,6 @@ create or replace package rasdc_versions is
   procedure webclient(name_array in owa.vc_arr, value_array in owa.vc_arr);
 end;
 /
-
 create or replace package body RASDC_VERSIONS is
   /*
   // +----------------------------------------------------------------------+
@@ -54,11 +53,12 @@ create or replace package body RASDC_VERSIONS is
   function version(p_log out varchar2) return varchar2 is
   begin
     p_log := '/* Change LOG:
+20200928 - Added program RASDC_GIT    
 20160413 - Added RSS forum feed    
 20151202 - Included session variables in filters        
 20141027 - Added footer on all pages
 */';
-    return 'v.1.1.20160413225530';
+    return 'v.1.120200928225530';
 
   end;
 
@@ -441,6 +441,10 @@ create or replace package body RASDC_VERSIONS is
               ''); x:=''; htp.p(RASDC_EXECUTION.version(x));
         htp.p('</td><td title="' || x ||
               '">&nbsp;&nbsp;&nbsp;log&nbsp;&nbsp;&nbsp;</td></tr>');
+        htp.p('<tr><td>RASDC_GIT</td><td>' ||
+              ''); x:=''; htp.p(RASDC_GIT.version(x));
+        htp.p('</td><td title="' || x ||
+              '">&nbsp;&nbsp;&nbsp;log&nbsp;&nbsp;&nbsp;</td></tr>');              
         htp.p('<tr><td>RASDI_CLIENT</td><td>' || ''); x:=''; htp.p(rasdi_client.version(x));
         htp.p('</td><td title="' || x ||
               '">&nbsp;&nbsp;&nbsp;log&nbsp;&nbsp;&nbsp;</td></tr>');
@@ -621,4 +625,3 @@ htp.p('</table></p><P align="right">
   end;
 end;
 /
-

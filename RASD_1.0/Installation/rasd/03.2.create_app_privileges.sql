@@ -49,6 +49,7 @@ create public synonym RASDC_UPLOAD for rasd.RASDC_UPLOAD;
 create public synonym rasdc_share for rasd.rasdc_share; 
 create public synonym rasdc_stats for rasd.rasdc_stats; 
 create public synonym rasdc_execution for rasd.rasdc_execution; 
+create public synonym RASDC_GIT for RASD.RASDC_GIT;
 grant execute on rasd.rasdc_attributes to public;
 grant execute on rasd.rasdc_blocksonform to public;
 grant execute on rasd.rasdc_cssjs to public;
@@ -71,6 +72,8 @@ grant execute on rasd.RASDC_UPLOAD to public;
 grant execute on rasd.rasdc_share to public;
 grant execute on rasd.rasdc_stats to public;
 grant execute on rasd.rasdc_execution to public;
+grant execute on rasd.RASDC_GIT to public;
+
 prompt
 prompt Privileges added
 prompt =====================

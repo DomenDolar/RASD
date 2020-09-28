@@ -22,7 +22,6 @@ create or replace package RASDC_BLOCKSONFORM is
   procedure Program(name_array in owa.vc_arr, value_array in owa.vc_arr);
 end;
 /
-
 create or replace package body RASDC_BLOCKSONFORM is
   /*
   // +----------------------------------------------------------------------+
@@ -54,6 +53,7 @@ create or replace package body RASDC_BLOCKSONFORM is
   begin
 
     p_log := '/* Change LOG:
+20200928 - Added Push 2 GIT (program shoud not have errors)    
 20200410 - Added new compilation message     
 20190617 - Added Form searcher    
 20190325 - Optimization on Table, View,Synonym LOV. Now it is stored in Session Storage. To refresh it you should logout ot delete cookie rasdi$SESSSTORAGEENABLED.    
@@ -68,7 +68,7 @@ create or replace package body RASDC_BLOCKSONFORM is
 20150814 - Added superuser
 20141027 - Added footer on all pages
 */';
-    return 'v.1.1.20200410225530';
+    return 'v.1.1.20200928225530';
 
   end;
 
@@ -1767,8 +1767,22 @@ htp.prn('
                                 RASDI_TRNSLT.text('Form references', lang) ||
                                 '" src="rasdc_files.showfile?pfile=pict/gumblink'||B10referenceyn(1)||'.jpg" width=21 border=0 >
 </A>
-</td>
-<TD><A class="A" 
+</td>');
+if  rasdc_git.getGitLocation is not null 
+ and  RASDC_LIBRARY.formhaserrors(B10form(1))=false 
+ and  rasdc_library.allowEditing(pformid) 
+  then
+htp.p('<td><A class="A" '); 
+htp.p(' href="javascript: var p_y = window.open(encodeURI(''!rasdc_git.program?ACTION=' ||
+                  RASDI_TRNSLT.text('Search', lang) ||'LANG='||lang||'&Pblockid=X&PFORMID='||pformid||'''),''p_y'',''width=700,height=400,resizable=1'');"');
+htp.p(' name="B10GIT_1">
+<IMG height=20 title="' ||
+                                RASDI_TRNSLT.text('Push 2 GIT', lang) ||
+                                '" src="rasdc_files.showfile?pfile=pict/gumbgit.jpg" width=21 border=0 >
+</A>
+</td>');
+end if;
+htp.p('<TD><A class="A" 
 href="RASDC_FILES.downloadplsql?PDATOTEKA='||PFORMID||'" target="_blank" name="B10LHTML3_1">' || B10LHTML3(1) ||
               '</A></TD>
 <TD> <a class="A" href="'|| B10form(1)  ||'.metadata" target="_blank" >
@@ -2163,4 +2177,3 @@ htp.p('
   end;
 end RASDC_BLOCKSONFORM;
 /
-
