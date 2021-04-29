@@ -23,7 +23,6 @@ create or replace package RASDC_FIELDSONBLOCK is
   procedure Program(name_array in owa.vc_arr, value_array in owa.vc_arr);
 end;
 /
-
 create or replace package body RASDC_FIELDSONBLOCK is
   /*
   // +----------------------------------------------------------------------+
@@ -50,10 +49,12 @@ create or replace package body RASDC_FIELDSONBLOCK is
   type dtab is table of date index by binary_integer;
   type ctab is table of varchar2(4000) index by binary_integer;
   type itab is table of pls_integer index by binary_integer;
+  type ltab is table of clob index by binary_integer;
 
   function version(p_log out varchar2) return varchar2 is
   begin
     p_log := '/* Change LOG:
+20210303 - Changes because change type of SQLTEXT     
 20200528 - Added info number of additional fields on block.    
 20200410 - Added new compilation message     
 20200203 - Added javascript check/uncheck for all fields in S, I, U, D, Mn., In., L and UI    
@@ -71,7 +72,7 @@ create or replace package body RASDC_FIELDSONBLOCK is
 20150814 - Added superuser    
 20141027 - Added footer on all pages
 */';
-    return 'v.1.1.20200528225530';
+    return 'v.1.1.20210303225530';
 
   end;
 
@@ -102,7 +103,7 @@ create or replace package body RASDC_FIELDSONBLOCK is
     B10clearyn    ctab;
     B10label      ctab;
     B10LPROZILCI  ctab;
-    B10sqltext    ctab;
+    B10sqltext    ltab;
     B10source     ctab;
     B10rform      ctab;
     B20RS         ctab;
@@ -2716,4 +2717,3 @@ htp.p('
   end;
 end RASDC_FIELDSONBLOCK;
 /
-

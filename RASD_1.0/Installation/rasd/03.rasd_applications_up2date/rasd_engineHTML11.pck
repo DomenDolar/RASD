@@ -114,7 +114,6 @@ procedure uskladi_forloop(
 */
 end;
 /
-
 create or replace package body rasd_engineHTML11 is
 /*
 // +----------------------------------------------------------------------+
@@ -166,6 +165,7 @@ create or replace package body rasd_engineHTML11 is
   function version(p_log out varchar2) return varchar2 is
   begin
    p_log := '/* Change LOG:
+20210131 - Fixed bug for L objects where UI Field <> Field - line 2917 (added ''????_VALUE'' in htpclob)   
 20200324 - Added rasdMandatory class for elements INPUT, SELECT, TEXTAREA, CHECKBOX and RADIO
 20200319 - When using VS visible=false now also label is hidden.  
 20200128 - Added Error trace log   
@@ -3041,7 +3041,7 @@ end loop;
                      (select p.formid,
                              p.nameid nameid,
                              p.nameid||'_NAME' anameid,
-                             decode(p.type , 'L' , '<% htpClob( '||p.nameid||' ); %>' , p.nameid||'_VALUE' ) value,
+                             decode(p.type , 'L' , '<% htpClob( '''||p.nameid||'_VALUE'' ); %>' , p.nameid||'_VALUE' ) value,
                              p.linkid linkjsid,
                              p.linkid, --||'_LINK' not tested jet
                              'D' elementtype,
@@ -4443,4 +4443,3 @@ begin
   null;
 end;
 /
-

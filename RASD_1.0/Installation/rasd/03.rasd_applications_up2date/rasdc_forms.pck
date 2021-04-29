@@ -23,7 +23,6 @@ create or replace package RASDC_FORMS is
   procedure Program(name_array in owa.vc_arr, value_array in owa.vc_arr);
 end;
 /
-
 create or replace package body RASDC_FORMS is
   /*
   // +----------------------------------------------------------------------+
@@ -54,6 +53,8 @@ create or replace package body RASDC_FORMS is
   function version(p_log out varchar2) return varchar2 is
   begin
     p_log := '/* Change LOG:
+20210303 - Default setting for  "Auto delete HTML" is now CHECKED         
+20201119 - Added Creat form wizzard button    
 20191220 - Added Creat form button
 20190325 - Added version filter
 20181023 - Added warnings    
@@ -67,7 +68,7 @@ create or replace package body RASDC_FORMS is
 20150814 - Added superuser
 20141027 - Added footer on all pages
 */';
-    return 'v.1.1.20191220225530';
+    return 'v.1.1.20210303225530';
 
   end;
 
@@ -659,7 +660,9 @@ select formid from rasd_forms where upper(form||':'||label) like upper('%'||pf1|
                text1id,
                text2id,
                referenceyn,
-               change)
+               change,
+               autodeletehtmlyn
+               )
             values
               (b10formid(i__),
                b10lobid(i__),
@@ -670,7 +673,8 @@ select formid from rasd_forms where upper(form||':'||label) like upper('%'||pf1|
                null,
                null,
                'N',
-               sysdate);
+               sysdate,
+               'Y');
                
                PDA := 'Y';
                
@@ -959,7 +963,9 @@ htp.p('
 htp.p('
 <a href="javascript: var x = window.open(encodeURI(''!rasdc_upload.page?pakcija=Nov''),'''',''scrollbars=1,width=600,height=300'');">
 <img height="20" alt="Upload" title="Upload" src="rasdc_files.showfile?pfile=pict/gumbupload.jpg" width="21" border="0"></a>
-</td></tr>
+</td>
+<td "nowrap"><input class="SUBMIT" type="button" onclick="javascript: window.location=''rasdc_welcome.page'';" value="'||RASDI_TRNSLT.text('Create new form with wizzard',lang)||'"/></td>
+</tr>
 <tr><td>
 ');
 
@@ -1303,4 +1309,3 @@ onClick="document.RASDC_FORMS.B10form_' || iB10 ||
   end;
 end RASDC_FORMS;
 /
-

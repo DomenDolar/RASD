@@ -53,12 +53,13 @@ create or replace package body RASDC_VERSIONS is
   function version(p_log out varchar2) return varchar2 is
   begin
     p_log := '/* Change LOG:
+20201122 - Added program RASDC_WELCOME       
 20200928 - Added program RASDC_GIT    
 20160413 - Added RSS forum feed    
 20151202 - Included session variables in filters        
 20141027 - Added footer on all pages
 */';
-    return 'v.1.120200928225530';
+    return 'v.1.120201122225530';
 
   end;
 
@@ -443,6 +444,10 @@ create or replace package body RASDC_VERSIONS is
               '">&nbsp;&nbsp;&nbsp;log&nbsp;&nbsp;&nbsp;</td></tr>');
         htp.p('<tr><td>RASDC_GIT</td><td>' ||
               ''); x:=''; htp.p(RASDC_GIT.version(x));
+        htp.p('</td><td title="' || x ||
+              '">&nbsp;&nbsp;&nbsp;log&nbsp;&nbsp;&nbsp;</td></tr>');              
+        htp.p('<tr><td>RASDC_WELCOME</td><td>' ||
+              ''); x:=''; htp.p(RASDC_WELCOME.version(x));
         htp.p('</td><td title="' || x ||
               '">&nbsp;&nbsp;&nbsp;log&nbsp;&nbsp;&nbsp;</td></tr>');              
         htp.p('<tr><td>RASDI_CLIENT</td><td>' || ''); x:=''; htp.p(rasdi_client.version(x));

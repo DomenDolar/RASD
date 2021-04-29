@@ -1,0 +1,709 @@
+create or replace package RASDC_FILES is
+  /*
+  // +----------------------------------------------------------------------+
+  // | RASD - Rapid Application Service Development                         |
+  // +----------------------------------------------------------------------+
+  // | Copyright (C) 2014       http://rasd.sourceforge.net                 |
+  // +----------------------------------------------------------------------+
+  // | This program is free software; you can redistribute it and/or modify |
+  // | it under the terms of the GNU General Public License as published by |
+  // | the Free Software Foundation; either version 2 of the License, or    |
+  // | (at your option) any later version.                                  |
+  // |                                                                      |
+  // | This program is distributed in the hope that it will be useful       |
+  // | but WITHOUT ANY WARRANTY; without even the implied warranty of       |
+  // | MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the         |
+  // | GNU General Public License for more details.                         |
+  // +----------------------------------------------------------------------+
+  // | Author: Domen Dolar       <domendolar@users.sourceforge.net>         |
+  // +----------------------------------------------------------------------+
+  */
+  function version(p_log out varchar2) return varchar2;
+
+  procedure download(pdatoteka varchar2 default null);
+  procedure page(
+  name_array  in owa.vc_arr,
+  value_array in owa.vc_arr
+  );
+    procedure upload (
+  name_array  in owa.vc_arr,
+  value_array in owa.vc_arr
+  );  
+  procedure upload_modplsql(PFORMID   number default null,
+                   pdatoteka varchar2 default null,
+                   plang     varchar2 default null);
+  procedure downloadplsql(pdatoteka varchar2 default null);
+  procedure showfile(pfile varchar2 default null, t varchar2 default null);
+  
+  procedure showQRCode(ptext varchar2 );
+
+  
+  --procedure getAngularCode(formid number);
+end;
+/
+create or replace package body RASDC_FILES is
+  /*
+  // +----------------------------------------------------------------------+
+  // | RASD - Rapid Application Service Development                         |
+  // +----------------------------------------------------------------------+
+  // | Copyright (C) 2014       http://rasd.sourceforge.net                 |
+  // +----------------------------------------------------------------------+
+  // | This program is free software; you can redistribute it and/or modify |
+  // | it under the terms of the GNU General Public License as published by |
+  // | the Free Software Foundation; either version 2 of the License, or    |
+  // | (at your option) any later version.                                  |
+  // |                                                                      |
+  // | This program is distributed in the hope that it will be useful       |
+  // | but WITHOUT ANY WARRANTY; without even the implied warranty of       |
+  // | MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the         |
+  // | GNU General Public License for more details.                         |
+  // +----------------------------------------------------------------------+
+  // | Author: Domen Dolar       <domendolar@users.sourceforge.net>         |
+  // +----------------------------------------------------------------------+
+  */
+
+  function version(p_log out varchar2) return varchar2 is
+  begin
+    p_log := '/* Change LOG:
+20200131 - Added showQRCode procedure. Using library ZT_QR - http://www.zt-tech.eu
+20180425 - Now all uses can customize RASD lookup    
+20180423 - Added http upload    
+20171029 - Added method getAngularCode - zip format    
+20141027 - Added footer on all pages
+*/';
+    return 'v.1.1.20200131225530';
+
+  end;
+
+  procedure prepisi_v_texte(pdatotekaid varchar2, PFORMID number) is
+    -- Prepis vsebine iz tabele RASD_FILES v tabelo RASD_TEXTS
+    v_raw        long;
+    v_blob       BLOB;
+    v_char       VARCHAR2(32767);
+    desc_offset  number := 100;
+    src_offset   number := 100;
+    lang_context number := 1;
+    warning      number;
+    vtextid      number;
+    i            pls_integer;
+    l            pls_integer;
+  BEGIN
+    SELECT blob_content
+      INTO v_blob
+      FROM RASD_FILES
+     WHERE name = pdatotekaid;
+
+    l := nvl(dbms_lob.getlength(v_blob), 0);
+    i := 0;
+    begin
+      select t.textid
+        into vtextid
+        from RASD_FORMS f, RASD_TEXTS t
+       where f.formid = PFORMID
+         and f.text2id = t.textid;
+      update RASD_TEXTS set text = '' where textid = vtextid;
+    exception
+      when no_data_found then
+        vtextid := to_number(null);
+    end;
+    loop
+      v_raw  := dbms_lob.substr(v_blob, 32750, i + 1);
+      v_raw  := utl_raw.translate(v_raw, '8A8E9A9E', 'A9AEB9BE');
+      v_char := utl_raw.cast_to_varchar2(v_raw);
+      if vtextid is null then
+        select nvl(max(textid), 0) + 1 into vtextid from RASD_TEXTS;
+        update RASD_FORMS set text2id = vtextid where formid = PFORMID;
+        insert into RASD_TEXTS (textid, text) values (vtextid, v_char);
+      else
+        update RASD_TEXTS set text = v_char where textid = vtextid;
+      end if;
+      i := i + 32750;
+      exit when i >= l;
+    end loop;
+    DELETE FROM RASD_FILES WHERE name = pdatotekaid;
+    commit;
+  end;
+  
+   procedure page(
+  name_array  in owa.vc_arr,
+  value_array in owa.vc_arr
+  ) is
+  RETURNFILE varchar2(1000);
+   begin
+
+         for i in 1..name_array.count loop    
+            if name_array(i) = 'FIN' then RETURNFILE:= value_array(i);
+            end if;
+            
+           -- htp.p(name_array(i)||'='||value_array(i));
+         end loop;
+
+   
+      htp.p('
+<HTML>
+<HEAD>
+<meta charset="utf-8" />
+'||RASDC_LIBRARY.RASD_UI_Libs||'
+
+<script type="text/javascript">
+
+ $(function() {
+     addSpinner();   
+  });
+
+   var chunkSize = 4000;
+   var bytesUploaded = 0;
+   
+   //$(document).ready(function() {
+   //   $("#btnUpload").prop("disabled",true);
+   //});
+
+   function sendfile() {
+      var files = document.getElementById(''files'').files;
+      var datoteka = files[0];
+      var reader = new FileReader();
+
+      //progress.style.width = "0%"; //IE ERROR
+      progress.textContent = "0%";
+
+      reader.onloadend = function(evt) {
+         if(evt.target.readyState == FileReader.DONE) { 
+            //console.log("zacetk: "+evt.target.result.byteLength);
+            sendChunk(evt.target.result, datoteka);
+         }
+      };
+      reader.readAsArrayBuffer(datoteka);
+   }
+   
+   function outputLink() {
+      var files = document.getElementById(''files'').files;
+      var datoteka = files[0];
+     $("#rasdSpinner").hide(); 
+     $("#btnUpload").prop("disabled",false);
+     $("#download").html( ''Download file: <A HREF="rasdc_files.showfile?pfile='||lower(user)||'/''+( (encodeURIComponent(datoteka.name).toLowerCase().indexOf(".gif") >= 0 || 
+                   encodeURIComponent(datoteka.name).toLowerCase().indexOf(".jpg") >= 0 ||
+                   encodeURIComponent(datoteka.name).toLowerCase().indexOf(".png") >= 0 ||
+                   encodeURIComponent(datoteka.name).toLowerCase().indexOf(".ico") >= 0)
+                   ? "pict/" :  (encodeURIComponent(datoteka.name).toLowerCase().indexOf(".js") >= 0 ? "js/" :  (encodeURIComponent(datoteka.name).toLowerCase().indexOf(".css") >= 0 ? "css/" : "")) ) + encodeURIComponent(datoteka.name) +''" target="_bank">'' + datoteka.name+''</A>'');     
+');
+if RETURNFILE is not null then 
+htp.p('      window.opener.'||RETURNFILE||'.value = '''||lower(user)||'/''+( (encodeURIComponent(datoteka.name).toLowerCase().indexOf(".gif") >= 0 || 
+                   encodeURIComponent(datoteka.name).toLowerCase().indexOf(".jpg") >= 0 ||
+                   encodeURIComponent(datoteka.name).toLowerCase().indexOf(".png") >= 0 ||
+                   encodeURIComponent(datoteka.name).toLowerCase().indexOf(".ico") >= 0)
+                   ? "pict/" :  (encodeURIComponent(datoteka.name).toLowerCase().indexOf(".js") >= 0 ? "js/" :  (encodeURIComponent(datoteka.name).toLowerCase().indexOf(".css") >= 0 ? "css/" : ""))) + encodeURIComponent(datoteka.name);');
+end if;
+htp.p('    
+   }   
+  
+   function _arrayBufferToBase64(buffer) {
+      var binary = '''';
+      var bytes = new Uint8Array(buffer);
+      var len = bytes.byteLength;
+      for(var i = 0; i < len; i++) {
+         binary += String.fromCharCode(bytes[i]);
+      }
+      return window.btoa(binary);
+   }
+   
+   function output(perc) {
+       // console.log("percentLoaded: "+perc + " %");
+
+       // progress.style.width = perc + ''%''; //IE ERROR
+        progress.textContent = perc + ''% uploaded'';
+        
+        //$("#fileUploadProgress").html(perc + " %");
+        //document.getElementById("fileUploadProgress2").value( perc + " %");
+        //alert(perc);                   
+   }
+   
+   function sendChunk(fileText, file) {
+      var vText = fileText;
+      var vSendText = "";
+      var txtUrl = "";
+      var i = 1;
+      var offset = 0;
+      var percentLoaded = 0;
+   
+      while(vText.byteLength > 0 && i <10000000) {
+         
+         vSendText = vText.slice(0,chunkSize);
+         vText = vText.slice(chunkSize);
+         off = chunkSize * (i-1);
+         
+         vSendText = encodeURIComponent(_arrayBufferToBase64(vSendText));
+         txtUrl = "!rasdc_files.upload?filename="+file.name+"&offset="+off+"&chunksize="+chunkSize+"&chunkNumber="+i+"&contenttype="+file.type+"&page="+vSendText;
+         
+         $.ajax({
+            url: txtUrl,
+            type: "GET",
+            async: false,
+            processData: false,
+            success: function (data, status) {
+               //console.log(status);
+               bytesUploaded += chunkSize;
+               if (bytesUploaded > file.size) {bytesUploaded = file.size;}
+              // console.log("bytesUploaded="+bytesUploaded);
+              // console.log("file.size="+file.size);
+               percentLoaded = Math.floor((bytesUploaded / file.size) * 100);
+               output(percentLoaded);
+            },
+            error: function(xhr, desc, err) {
+               console.log(desc);
+               console.log(err);
+            }                 
+         });
+         i++;
+      }
+     
+     outputLink(); 
+   }
+</script>
+
+<style>
+   #progress_bar {
+      margin: 10px 0;
+      padding: 3px;
+      border: 1px solid #000;
+      font-size: 14px;
+      clear: both;
+      opacity: 0;
+      -moz-transition: opacity 1s linear;
+      -o-transition: opacity 1s linear;
+      -webkit-transition: opacity 1s linear;
+   }
+   #progress_bar.loading {
+      opacity: 1.0;
+   }
+   #progress_bar .percent {
+      background-color: #99ccff;
+      height: auto;
+      width: 0;
+   }
+   #fileHandler {
+      width: 450px;
+      height: auto;
+      border-radius: 5px;
+      //border: 2px solid black;
+      background-color: white;
+      padding:10px;
+   }
+   #fileUploadProgress {
+      padding:10px;
+   }
+   #list {
+    font-size: 12;
+    margin: 40px;
+   }   
+</style>
+
+</HEAD>
+
+<BODY>
+   <div id="rasdSpinner" class="rasdSpinner" style="display:none;"></div> 
+<div class="hint">   
+   <div id="fileHandler">
+      <input type="file" id="files" name="file" />
+      <button onclick="abortRead();" id="btnCancel" class="rasdButton">Cancel read</button>
+      <button onclick="sendfile(); " id="btnUpload" class="rasdButton">Upload</button>
+      <br />
+      <br />
+      Customize your RASD development tool.<br/>
+      To replace default object use the same name with posfix (eg. : pict/<B>spinner</B>.gif you can upload file <B>spinner</B>1.gif, ...)     
+      If there will be more objects with same name (+ postfix) they will be read randomly.
+       <br />   
+      <div id="progress_bar">
+         <div class="percent">0%</div>
+      </div>
+      
+      <div id="download">
+      </div>
+    
+         <div id="list">
+
+');   
+for r in (select name from rasd_files order by name) loop
+
+htp.p('<A HREF="rasdc_files.showfile?pfile='||r.name||'" target="_bank">'||r.name||'</A></br>');
+
+end loop;
+
+htp.p('
+     </div>
+</div>
+
+   </div>
+   <script>
+   
+      var reader;
+      var progress = $(".percent");
+      
+      function abortRead() {
+         $("#download").html("");
+         reader.abort();
+      }
+      
+      function errorHandler(evt) {
+         switch(evt.target.error.code) {
+            case evt.target.error.NOT_FOUND_ERR:
+               alert(''File Not Found!'');
+               break;
+            case evt.target.error.NOT_READABLE_ERR:
+               alert(''File is not readable'');
+               break;
+            case evt.target.error.ABORT_ERR:
+               break; // noop
+            default:
+               alert(''An error occurred reading this file.'');
+         };
+      }
+      
+      function updateProgress(evt) {
+         if(evt.lengthComputable) {
+            var percentLoaded = Math.round((evt.loaded / evt.total) * 100);
+            if(percentLoaded < 100) {
+               progress.style.width = percentLoaded + ''%'';
+               progress.textContent = percentLoaded + ''%'';
+            }
+         }
+      }
+      
+      function handleFileSelect(evt) {
+         $("#download").html("");
+
+         //progress.style.width = ''0%''; //IE ERROR
+         //progress.textContent = ''0%'';
+         
+         reader = new FileReader();
+         reader.onerror = errorHandler;
+         reader.onprogress = updateProgress;
+         reader.onabort = function(e) {
+            alert(''File read cancelled'');
+         };
+         reader.onloadstart = function(e) {
+            document.getElementById(''progress_bar'').className = ''loading'';
+         };
+         reader.onload = function(e) {
+            $("#btnUpload").prop("disabled",false);
+            $("#btnCancel").prop("disabled",true);
+            //progress.style.width = ''100%'';
+            //progress.textContent = ''100%'';
+         }
+         //reader.readAsBinaryString(evt.target.files[0]); //IE error
+      }
+
+      var el = document.getElementById(''files'');
+      if (el.addEventListener) {
+         el.addEventListener(''change'', handleFileSelect, false); 
+      } else if (el.attachEvent) {
+         el.attachEvent(''onchange'', handleFileSelect);
+      }
+
+      
+      
+   </script>
+</div>
+</BODY>
+</HTML>
+');
+   end page;
+  
+   procedure upload(name_array  in owa.vc_arr, value_array in owa.vc_arr) is 
+   begin
+      declare
+         p_b blob;
+         p_body blob;
+         p_offset number;
+         p_filename varchar2(4000);
+         p_raw long raw;
+         p_chunksize varchar2(200);
+         p_status varchar2(200);
+         offset number;
+         filename varchar2(4000);
+         chunksize varchar2(200);
+         chunkNumber number;
+         contenttype RASD_FILES.CONTENT_TYPE%type;
+         page blob;
+         x varchar2(32000);
+      begin
+         
+         for i in 1..name_array.count loop    
+            if name_array(i) = 'offset' then offset:= value_array(i);
+            elsif name_array(i) = 'filename' then filename:= value_array(i);
+            elsif name_array(i) = 'chunksize' then chunksize:= value_array(i);
+            elsif name_array(i) = 'chunkNumber' then chunkNumber:= value_array(i);
+            elsif name_array(i) = 'contenttype' then contenttype:= value_array(i);
+            elsif name_array(i) = 'page' then page:= utl_encode.base64_decode(utl_raw.cast_to_raw(value_array(i)));
+            end if;
+            
+   --         htp.p(name_array(i)||'='||value_array(i));
+         end loop;
+         
+         -- pull the binds into locals
+         p_offset:= OFFSET + 1;
+         p_body:= page;
+         p_filename:= filename;
+         p_chunksize:= chunksize;
+         
+         -- if there is already a file with this name nuke it since this is chunk number one.
+         if chunkNumber = 1 then
+            p_status:= 'DELETING';
+            delete from rasd_files where name = user||'/'||p_filename;
+         end if;
+         
+         -- grab the blob storing the first chunks
+         select d.blob_content, doc_size into p_b, p_offset
+           from rasd_files d
+          where name = lower(user)||'/'|| decode( nvl(instr(lower(p_filename),'.png'),0)+nvl(instr(lower(p_filename),'.gif'),0)+nvl(instr(lower(p_filename),'.jpg'),0)+nvl(instr(lower(p_filename),'.ico'),0) , 0 , '','pict/' )||decode(nvl(instr(lower(p_filename),'.js'),0) , 0 , '','js/' )||decode(nvl(instr(lower(p_filename),'.css'),0) , 0 , '','css/' )||p_filename 
+            for update of blob_content;
+         
+         p_status:=' WRITING';
+         
+         -- append it
+         dbms_lob.append(p_b, p_body);
+         commit;
+      exception 
+         when no_data_found then
+            -- if no blob found above do the first insert
+            p_status:=' INSERTING';
+            insert into rasd_files(name, blob_content, doc_size, mime_type, last_updated)
+            values (lower(user)||'/'||decode( nvl(instr(lower(p_filename),'.png'),0)+nvl(instr(lower(p_filename),'.gif'),0)+nvl(instr(lower(p_filename),'.jpg'),0)+nvl(instr(lower(p_filename),'.ico'),0) , 0 , '','pict/' )||decode(nvl(instr(lower(p_filename),'.js'),0) , 0 , '','js/' )||decode(nvl(instr(lower(p_filename),'.css'),0) , 0 , '','css/' )||p_filename, p_body, p_offset, contenttype, sysdate);
+            commit;
+         when others then
+            -- when something blows out print the error message to the client
+            htp.p(p_status);
+            htp.p(SQLERRM);
+      end;   
+   end upload;
+  
+
+  procedure upload_modplsql(PFORMID   number default null,
+                   pdatoteka varchar2 default null,
+                   plang     varchar2 default null) is
+    v_form    varchar2(100);
+    v_version number;
+  begin
+
+    select form, version
+      into v_form, v_version
+      from RASD_FORMS
+     where formid = PFORMID;
+
+    rasdi_client.secCheckPermission(v_form, 'upload');
+
+    htp.p('
+<html>
+<HEAD>
+<META HTTP-EQUIV="Content-Type" NAME="" CONTENT="text/html;CHARSET=WINDOWS-1250">
+<META HTTP-EQUIV="Pragma" CONTENT="no-cache"><META HTTP-EQUIV="Expires" CONTENT="-1">
+'||RASDC_LIBRARY.RASD_UI_Libs||'
+
+<title>Upload</title>
+</HEAD>
+<body>
+<DIV class="hint">
+<TABLE width="100%" border="0" cellspacing="0" cellpadding="0" bgcolor="#FFFF99" summary="">
+ <tr bgcolor="red"><td ><font size="5" color="white">Upload: ' ||
+          v_form || '(' || v_version || ')</font></TD></TR>
+</TABLE>
+');
+    if pdatoteka is not null and PFORMID is not null then
+      prepisi_v_texte(pdatoteka, PFORMID);
+      rasd_enginehtml10.readFromFile(PFORMID);
+      rasd_engine10.form(PFORMID);
+      htp.p('
+ <BR>
+   ' || RASDI_TRNSLT.text('Uploaded file:', plang) || ' "' ||
+            substr(pdatoteka, instr(pdatoteka, '/', -1, 1) + 1) || '" ' ||
+            RASDI_TRNSLT.text('is loaded sucessfuly.', plang) || '
+ <BR>
+ <BR>
+ <INPUT type="button" class=submit value="' ||
+            RASDI_TRNSLT.text('Close', plang) || '" onclick="window.close();">
+ <BR>
+');
+    else
+      htp.p('
+ <FORM   enctype="multypeart/form-data" action="RASDC_FILES.upload" method="POST">
+ <input type="hidden" name="PFORMID" value="' || PFORMID || '">
+ <p>' || RASDI_TRNSLT.text('Chose file:', plang) ||
+            '<INPUT type="file" name="pdatoteka"><br>
+ <p><INPUT type="submit" class=submit value="' ||
+            RASDI_TRNSLT.text('Send', plang) || '" >
+    <INPUT type="button" class=submit value="' ||
+            RASDI_TRNSLT.text('Close', plang) || '" onclick="window.close();">
+</FORM>
+<BR>
+');
+    end if;
+    htp.p('
+</DIV>
+</body>
+</html>
+');
+  exception
+    when others then
+      htp.p('
+<HTML>
+<HEAD>
+<META HTTP-EQUIV="Content-Type" CONTENT="text/html;CHARSET=WINDOWS-1250">
+<META HTTP-EQUIV="Pragma" CONTENT="no-cache"><META HTTP-EQUIV="Expires" CONTENT="-1">
+<LINK rel="STYLESHEET" type="text/css" href="rasdc_files.showfile?pfile=css/rasd.css">
+<SCRIPT LANGUAGE="JavaScript" src="rasdc_files.showfile?pfile=js/rasd.js"></SCRIPT></HEAD>
+<TITLE>' || RASDI_TRNSLT.text('Message', plang) || '</TITLE>
+</HEAD>
+<BODY bgcolor="#C0C0C0">
+');
+      RASDC_LIBRARY.showphead(RASDI_TRNSLT.text('Message', plang),
+                                 '',
+                                 '',
+                                 plang);
+      htp.p('<FORM ACTION="" METHOD="POST" NAME="SPOROCILA">
+<table>
+<tr><td>
+<FONT COLOR="red" size="4">' ||
+            RASDI_TRNSLT.text('Error', plang) || ': </FONT></td><td>
+' || replace(sqlerrm,
+                        '
+',
+                        '<BR>') ||
+            '</td></tr><tr><td></td><td></td></tr></table>
+<BR>
+<INPUT TYPE="button" NAME="NAZAJ" VALUE=" ' ||
+            RASDI_TRNSLT.text('Close', plang) || ' " class=submit onClick="javascript:window.close()">
+<script language="JavaScript">
+  document.SPOROCILA.NAZAJ.focus();
+</script>
+<SCRIPT LANGUAGE="JavaScript">
+ izpis_dna('''||rasdi_client.c_registerto||''');
+</SCRIPT>
+</FORM></BODY></HTML>');
+  end;
+
+  procedure download(pdatoteka varchar2 default null) is
+  begin
+
+    rasdi_client.secCheckPermission(pdatoteka, 'download');
+    if pdatoteka is not null then
+      owa_util.mime_header('XX', true);
+      rasd_enginehtml10.outputelement(pdatoteka, 0, 'Y');
+    end if;
+  end;
+
+  procedure downloadplsql(pdatoteka varchar2 default null) is
+  begin
+    if pdatoteka is not null then
+      rasdi_client.secCheckPermission(pdatoteka, 'download');
+
+     -- owa_util.mime_header('Content-Type: text/html;');
+     -- owa_util.http_header_close;
+      htp.p('<code>');
+      for r in (select line, text, name, type
+                  from all_source a, RASD_FORMS f
+                 where upper(a.name) = upper(f.form)
+                   and a.owner = user
+                   and f.formid = pdatoteka
+                 order by type, line) loop
+        htp.prn(r.text||'<br/>');
+      end loop;
+      htp.p('</code>');
+    end if; 
+  end;
+
+  procedure showfile(pfile varchar2 default null, t varchar2 default null) is
+    l_blob_content rasd_files.blob_content%TYPE;
+    l_mime_type    rasd_files.mime_type%TYPE;
+    type t_spinerlist is table of varchar2(1000) index by binary_integer;
+    spinnerlist    t_spinerlist;
+    v_filesearch  varchar2(1000);
+    i number := 0;
+    vfile varchar2(1000) := pfile;
+  BEGIN
+    v_filesearch := replace(replace(replace(replace(replace(replace(lower(vfile),'.png',''),'.js',''),'.css',''),'.ico',''),'.jpg',''),'.gif','');  
+  
+  --  if instr(lower(vfile), v_filesearch ) > 0 then
+      for r in (       
+        SELEct name
+         FROM rasd_files
+        WHERE lower(name) like lower(user)||'/'||v_filesearch||'%'  
+        ) loop
+          i := i+1;
+          spinnerlist(i) := r.name;    
+        end loop;
+
+        if i > 0 then
+          vfile := spinnerlist( round(dbms_random.value(1,i)) );
+        end if;
+        
+   -- end if;
+
+    SELECT blob_content, nvl(mime_type,'xtext/plain')
+      INTO l_blob_content, l_mime_type
+      FROM rasd_files
+     WHERE name = vfile; --decode(instr(pfile, '&'), 0, pfile,  substr(pfile , 1 , instr(pfile, '&')-1))
+
+    OWA_UTIL.mime_header(l_mime_type, FALSE);
+    HTP.p('Content-Length: ' || DBMS_LOB.getlength(l_blob_content));
+
+    HTP.p('Content-Disposition: filename="dwnld_'||vfile||'"');
+    
+    OWA_UTIL.http_header_close;
+
+    WPG_DOCLOAD.download_file(l_blob_content);
+  end;
+
+
+  procedure showQRCode(ptext varchar2 ) is
+    l_blob_content rasd_files.blob_content%TYPE;
+    l_mime_type    rasd_files.mime_type%TYPE;
+    type t_spinerlist is table of varchar2(1000) index by binary_integer;
+    spinnerlist    t_spinerlist;
+    v_filesearch  varchar2(1000);
+    i number := 0;
+  BEGIN
+  
+    l_blob_content :=    zt_qr.f_qr_as_bmp(ptext,
+                               'L',
+                               '1');  
+  
+  
+    OWA_UTIL.mime_header('image/bmp', FALSE);
+    HTP.p('Content-Length: ' || DBMS_LOB.getlength(l_blob_content));
+
+--    HTP.p('Content-Disposition: filename="dwnld_'||vfile||'"');
+    
+    OWA_UTIL.http_header_close;
+
+    WPG_DOCLOAD.download_file(l_blob_content);
+  end;
+
+
+
+  
+/*
+  procedure getAngularCode(formid number) is
+    g_zipped_blob blob;
+    
+    ret RASD_ENGINEANG10.zipfile;
+    
+begin
+  
+  ret := RASD_ENGINEANG10.generate(formid); 
+  
+  for i in 1 .. ret.count loop
+    as_zip.add1file( g_zipped_blob, ret(i).filename, utl_raw.cast_to_raw(  ret(i).content ) ); 
+  end loop;
+    as_zip.finish_zip( g_zipped_blob );
+      
+    OWA_UTIL.mime_header( 'application/x-zip-compressed' , FALSE);
+    HTP.p('Content-Length: ' || DBMS_LOB.getlength(g_zipped_blob));
+    HTP.p('Content-Disposition: attachment; filename=FILENAME.zip');
+    
+    OWA_UTIL.http_header_close;
+
+    WPG_DOCLOAD.download_file(g_zipped_blob);
+    dbms_lob.freetemporary( g_zipped_blob );
+  end;  
+*/
+end;
+/

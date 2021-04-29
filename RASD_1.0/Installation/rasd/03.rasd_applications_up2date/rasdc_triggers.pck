@@ -22,7 +22,6 @@ create or replace package RASDC_TRIGGERS is
   procedure Program(name_array in owa.vc_arr, value_array in owa.vc_arr);
 end;
 /
-
 create or replace package body RASDC_TRIGGERS is
   /*
   // +----------------------------------------------------------------------+
@@ -54,6 +53,8 @@ create or replace package body RASDC_TRIGGERS is
   function version(p_log out varchar2) return varchar2 is
   begin
     p_log := '/* Change LOG: 
+20201117 - Char counter changed (UTF8 in Chrome newline has 2bytes and spec char 2byts but in editor counts 1byte - maxSize is set to 32000 chars (32768 in batabase) )    
+20201027 - Refershed list of data in CodeMirror helper     
 20200410 - Added new compilation message    
 20200302 - Solved problem on asistance optimization and code hinter js error
 20200123 - Source Asistance optimization     
@@ -74,7 +75,7 @@ create or replace package body RASDC_TRIGGERS is
 20150813 - Changes because of FORM_CSS and FORM_JS
 20141027 - Added footer on all pages
 */';
-    return 'v.1.1.20200410225530';
+    return 'v.1.1.20201117225530';
 
   end;
 
@@ -210,7 +211,7 @@ end if;
         elsif upper(name_array(i__)) =
               upper('B10PLSQL_' ||
                     substr(name_array(i__),
-                           instr(name_array(i__), '_', -1) + 1)) then
+                           instr(name_array(i__), '_', -1) + 1)) then                               
           B10plsql(to_number(substr(name_array(i__), instr(name_array(i__), '_', -1) + 1))) := value_array(i__);
         elsif upper(name_array(i__)) =
               upper('B10PLSQLSPEC_' ||
@@ -245,7 +246,7 @@ end if;
       end if;
       if B10plsqlspec.count > v_max then
         v_max := B10plsqlspec.count;
-      end if;
+      end if;     
       for i__ in 1 .. v_max loop
         if not B10RID.exists(i__) then
           B10RID(i__) := null;
@@ -290,7 +291,7 @@ end if;
       --</POST_SUBMIT>
     end;
     procedure psubmit is
-    begin
+    begin     
       on_submit;
       on_session;
       post_submit;
@@ -1085,12 +1086,23 @@ htp.prn('      "'||r.polje||'.custom":{},');
 end loop;
 htp.prn('"__RASD_PROCEDURES:" : {},');
 htp.prn('"rlog( message VARCHAR2 );" : {},');
+htp.prn('"htpClob( text CLOB );" : {},');
+htp.prn('"openLOV( p_lov varchar2,  p_value varchar2) return lovtab__ (label VARHAR2,id VARCHAR2)" : {},');
 htp.prn('"version" : {},');
 htp.prn('"psubmit(name_array, value_array)" : {},');
 htp.prn('"pclear" : {},');
 htp.prn('"pselect" : {},');
 htp.prn('"pcommit" : {},');
 htp.prn('"poutput" : {},');
+
+for rx in (
+  select 1 from rasd_forms f where f.formid = pformid
+  and f.autocreaterestyn = 'Y'
+) loop
+htp.prn('"poutputrest" : {},');
+htp.prn('"poutputrest() return clob" : {},');
+end loop;
+
 for r in (select blockid from rasd_blocks b where b.formid = pformid order by blockid)
 loop
 htp.prn('"pclear_'||r.blockid||'(pstart number)" : {},');
@@ -1155,16 +1167,23 @@ window.editor1.on("beforeChange", function (cm, change) {
   
   window.editor.setSize("800","450");
 
-  window.editor.setOption("maxLength", 31905);
+  //32768 max each spec char un UTF8 has 2byts but in editor counts 1byte
+  window.editor.setOption("maxLength", 32000); 
  
 
 window.editor.on("beforeChange", function (cm, change) {
     var maxLength = cm.getOption("maxLength");
+    var isChrome =  window.chrome;
     if (maxLength && change.update) {
         var str = change.text.join("\n");
         var delta = str.length-(cm.indexFromPos(change.to) - cm.indexFromPos(change.from));
+        var aaa = cm.doc.getValue();
         if (delta <= 0) { return true; }
-        delta = cm.getValue().length+delta-maxLength;
+        xval = cm.getValue()
+        if(isChrome){
+          xval = xval.replace(/(\r\n|\n|\r)/g,"  ");
+        }          
+        delta = xval.length+delta-maxLength;
         document.getElementById("B10PLSQLCOUNT_1").innerHTML = "'||RASDI_TRNSLT.text('Characters left:', lang)||' " + ((delta*-1)+1) ;
         if (delta > 0) {
             str = str.substr(0, str.length-delta);
@@ -1522,4 +1541,3 @@ htp.p('
   end;
 end RASDC_TRIGGERS;
 /
-

@@ -23,7 +23,6 @@ create or replace package RASDC_EXECUTION is
   procedure Program(name_array in owa.vc_arr, value_array in owa.vc_arr);
 end;
 /
-
 create or replace package body RASDC_EXECUTION is
   /*
   // +----------------------------------------------------------------------+
@@ -49,9 +48,11 @@ create or replace package body RASDC_EXECUTION is
   function version(p_log out varchar2) return varchar2 is
   begin
     p_log := '/* Change LOG:
+20210303 - Changes because change type of SQLTEXT    
+20201022 - Added triggers PRE_SELECT and POST_SELECT on FORM level.    
 20200120 - First version
 */';
-    return 'v.1.1.20200120225530';
+    return 'v.1.1.20210303225530';
 
   end;
 
@@ -367,7 +368,7 @@ if PCHK = 'Y' or PCHK = 'N' and instr(v_txt,'<a') > 0 then htp.p(v_txt); end if;
       for rb in (
     select b.formid,
            b.blockid,
-           b.sqltext,
+           to_char(substr(b.sqltext,1,1)) sqltext,
            b.label,
            min(p.orderby) orderby,
            '!rasdc_fieldsonblock.program?Pblockid='||b.blockid||vaddlink link
@@ -380,7 +381,7 @@ if PCHK = 'Y' or PCHK = 'N' and instr(v_txt,'<a') > 0 then htp.p(v_txt); end if;
 
      group by b.formid,
               b.blockid,
-              b.sqltext,
+              to_char(substr(b.sqltext,1,1)),
               b.label
      order by orderby, b.blockid) loop
 v_txt := '<div class="blocks">';      
@@ -430,10 +431,22 @@ htp.p('</div>');
 htp.p('<div class="selectcode">');      
 htp.p('<h2>--SELECT</h2>');
 htp.p('<h3>pselect</h3>');
+
+v_txt := '<div class="trigger"><div class="namesize">&lt;PRE_SELECT&gt;</div>'; 
+      for r in ( 
+          select t.triggerid, '!rasdc_triggers.program?pBLOKtriggerid=/.../'||t.triggerid||vaddlink link
+          from rasd_triggers t where formid =  pformid   and blockid is null  and t.triggerid = 'PRE_SELECT'  and plsql is not null and upper(triggerid||':'||plsql||':'||plsqlspec) like upper('%'||pf||'%')
+      ) loop      
+v_txt := v_txt || '<a target="_parent" onclick="javascript: window.opener.location = '''||r.link||'''" >Source</a>';
+      end loop;
+v_txt := v_txt || '</div>';
+if PCHK = 'Y' or PCHK = 'N' and instr(v_txt,'<a') > 0 then htp.p(v_txt); end if;
+
+
       for rb in (
     select b.formid,
            b.blockid,
-           b.sqltext,
+           to_char(substr(b.sqltext,1,1)) sqltext,
            b.label,
            min(p.orderby) orderby,
            '!rasdc_fieldsonblock.program?Pblockid='||b.blockid||vaddlink link,
@@ -446,7 +459,7 @@ htp.p('<h3>pselect</h3>');
 (select a.blockid from rasd_pages a where a.page = to_number(ppages) and formid = pformid )    or ppages is null )                 
      group by b.formid,
               b.blockid,
-              b.sqltext,
+              to_char(substr(b.sqltext,1,1)),
               b.label
      order by orderby, b.blockid) loop
 v_txt := '<div class="blocks">';      
@@ -486,6 +499,19 @@ v_txt := v_txt||'</div>';
 if PCHK = 'Y' or PCHK = 'N' and instr(v_txt,'>Source<') > 0 or PCHK = 'N' and instr(v_txt,'gumbsqlred.jpg') > 0  then htp.p(v_txt); end if;
 
      end loop;
+
+v_txt := '<div class="trigger"><div class="namesize">&lt;POST_SELECT&gt;</div>'; 
+      for r in ( 
+          select t.triggerid, '!rasdc_triggers.program?pBLOKtriggerid=/.../'||t.triggerid||vaddlink link
+          from rasd_triggers t where formid =  pformid   and blockid is null  and t.triggerid = 'POST_SELECT'  and plsql is not null and upper(triggerid||':'||plsql||':'||plsqlspec) like upper('%'||pf||'%')
+      ) loop      
+v_txt := v_txt || '<a target="_parent" onclick="javascript: window.opener.location = '''||r.link||'''" >Source</a>';
+      end loop;
+v_txt := v_txt || '</div>';
+if PCHK = 'Y' or PCHK = 'N' and instr(v_txt,'<a') > 0 then htp.p(v_txt); end if;
+
+
+
 --CLEAR
 htp.p('<h3>pclear</h3>');
 
@@ -503,7 +529,7 @@ if PCHK = 'Y' or PCHK = 'N' and instr(v_txt,'<a') > 0 then htp.p(v_txt); end if;
       for rb in (
     select b.formid,
            b.blockid,
-           b.sqltext,
+           to_char(substr(b.sqltext,1,1)) sqltext,
            b.label,
            min(p.orderby) orderby,
            '!rasdc_fieldsonblock.program?Pblockid='||b.blockid||vaddlink link
@@ -515,7 +541,7 @@ if PCHK = 'Y' or PCHK = 'N' and instr(v_txt,'<a') > 0 then htp.p(v_txt); end if;
 (select a.blockid from rasd_pages a where a.page = to_number(ppages) and formid = pformid )    or ppages is null )                        
      group by b.formid,
               b.blockid,
-              b.sqltext,
+              to_char(substr(b.sqltext,1,1)),
               b.label
      order by orderby, b.blockid) loop
 v_txt := '<div class="blocks">';      
@@ -605,7 +631,7 @@ if PCHK = 'Y' or PCHK = 'N' and instr(v_txt,'<a') > 0 then htp.p(v_txt); end if;
       for rb in (
     select b.formid,
            b.blockid,
-           b.sqltext,
+           to_char(substr(b.sqltext,1,1)) sqltext,
            b.label,
            min(p.orderby) orderby,
            '!rasdc_fieldsonblock.program?Pblockid='||b.blockid||vaddlink link
@@ -617,7 +643,7 @@ if PCHK = 'Y' or PCHK = 'N' and instr(v_txt,'<a') > 0 then htp.p(v_txt); end if;
 (select a.blockid from rasd_pages a where a.page = to_number(ppages) and formid = pformid )    or ppages is null )                        
      group by b.formid,
               b.blockid,
-              b.sqltext,
+              to_char(substr(b.sqltext,1,1)),
               b.label
      order by orderby, b.blockid) loop
 
@@ -785,4 +811,3 @@ htp.p('
 end;
 end ;
 /
-

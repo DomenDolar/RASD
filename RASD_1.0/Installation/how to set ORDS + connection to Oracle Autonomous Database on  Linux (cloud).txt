@@ -111,6 +111,7 @@ cretae file oracle-xe in /etc/cron.daily and go to dir /etc/cron.daily
 >vi oracle-cow
 --copy text--
 #/bin/sh
+kill `ps -ef | grep ords.war | awk '{print $2}'`
 
 export ORACLE_HOME=/home/opc/u01/instantclient_19_3
 export TNS_ADMIN=/home/opc/u01/instantclient_19_3

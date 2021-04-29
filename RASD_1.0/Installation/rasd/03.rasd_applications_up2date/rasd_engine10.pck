@@ -155,7 +155,7 @@ GBUTTONCLR -- clear button action
            b.rowidyn,
            b.pagingyn,
            b.clearyn,
-           b.sqltext,
+         --  b.sqltext,
            b.label,
            min(p.orderby) orderby
       from rasd_blocks b, rasd_fields p
@@ -173,7 +173,7 @@ GBUTTONCLR -- clear button action
               b.rowidyn,
               b.pagingyn,
               b.clearyn,
-              b.sqltext,
+         --     b.sqltext,
               b.label
      order by orderby;
   
@@ -198,7 +198,6 @@ GBUTTONCLR -- clear button action
 
 end;
 /
-
 create or replace package body rasd_engine10 is
 /*
 // +----------------------------------------------------------------------+
@@ -223,7 +222,8 @@ create or replace package body rasd_engine10 is
  
 function version(p_log out varchar2) return varchar2 is
   begin
-   p_log := '/* Change LOG: 
+   p_log := '/* Change LOG:
+20210303 Changes because change type of SQLTEXT    
 20180520 Added VS - element NAME+#SET - VisualSettings (new type stab) now you can set for selected fileds settings for visible, readonly or disabled          
 20180420 Added possibility to chose to create REST program .rest or BATCH program .main - default is Y. 
 20180405 Chanege in REST - fields unchecked on elementyn are not in the rest list
@@ -693,7 +693,7 @@ function version(p_log out varchar2) return varchar2 is
   end;
  
   function getSQLText(pformid  rasd_forms.formid%type,
-                      pblockid rasd_blocks.blockid%type) return varchar2 is
+                      pblockid rasd_blocks.blockid%type) return clob is
     v_sqltable rasd_blocks.sqltable%type;
     v_sqltext  rasd_blocks.sqltext%type;
   
@@ -2316,7 +2316,7 @@ function checkMandatoryFields() {
    
    addcnl('    htp.p(''  try { for (j__ = 1; j__ <= '||owa_util.ite( rb.numrows=0 , 9999,rb.numrows)||'; j__++) { '');');
 
-   -- preveri insertnnyn Äe ta del izvede
+   -- preveri insertnnyn èe ta del izvede
     i := 0;
     for rp in c_fieldsOfBlock(pformid, rb.blockid) loop
     if    nvl(rp.elementyn, c_false) = c_true 
@@ -5808,4 +5808,3 @@ addcnl('  end;');
   
 end;
 /
-

@@ -129,7 +129,7 @@ create table RASD_BLOCKS
   rowidyn   VARCHAR2(1 BYTE),
   pagingyn  VARCHAR2(1 BYTE),
   clearyn   VARCHAR2(1 BYTE),
-  sqltext   VARCHAR2(4000 BYTE),
+  sqltext   CLOB,
   label     VARCHAR2(100 BYTE),
   source    VARCHAR2(1 BYTE),
   hiddenyn  VARCHAR2(1 BYTE),

@@ -23,7 +23,6 @@ create or replace package RASDC_TEST is
   procedure webclient(name_array in owa.vc_arr, value_array in owa.vc_arr);
 end;
 /
-
 create or replace package body RASDC_TEST is
   /*
   // +----------------------------------------------------------------------+
@@ -54,6 +53,7 @@ create or replace package body RASDC_TEST is
   function version(p_log out varchar2) return varchar2 is
   begin
     p_log := '/* Change LOG:
+20201022 - Added Comment and UNComment RLOG option      
 20200626 - Added custom functions in testing list      
 20200410 - Added new compilation message      
 20200211 - Added FORMAT_ERROR_BACKTRACE to compile block - based on generateing code.    
@@ -62,7 +62,7 @@ create or replace package body RASDC_TEST is
 20150813 - Added debug mode
 20141027 - Added footer on all pages
 */';
-    return 'v.1.1.20200626225530';
+    return 'v.1.1.20201022225530';
 
   end;
 
@@ -432,6 +432,19 @@ htp.p('
               '" onclick=" document.getElementById(''ACTION'').value=''' ||
               RASDI_TRNSLT.text('Debug', lang) ||
               '''; document.RASDC_TEST.submit(); this.disabled = true; ">
+
+<INPUT  class="SUBMIT" type="button" value="' ||
+              RASDI_TRNSLT.text('Comment RLOG', lang) ||
+              '" onclick=" document.getElementById(''ACTION'').value=''' ||
+              RASDI_TRNSLT.text('Comment RLOG', lang) ||
+              '''; document.RASDC_TEST.submit(); this.disabled = true; ">
+
+<INPUT  class="SUBMIT" type="button" value="' ||
+              RASDI_TRNSLT.text('UNComment RLOG', lang) ||
+              '" onclick=" document.getElementById(''ACTION'').value=''' ||
+              RASDI_TRNSLT.text('UNComment RLOG', lang) ||
+              '''; document.RASDC_TEST.submit(); this.disabled = true; ">
+
 ');
 end if;
 htp.p('
@@ -493,6 +506,19 @@ htp.p('
               '" onclick=" document.getElementById(''ACTION'').value=''' ||
               RASDI_TRNSLT.text('Debug', lang) ||
               '''; document.RASDC_TEST.submit(); this.disabled = true; ">
+
+<INPUT  class="SUBMIT" type="button" value="' ||
+              RASDI_TRNSLT.text('Comment RLOG', lang) ||
+              '" onclick=" document.getElementById(''ACTION'').value=''' ||
+              RASDI_TRNSLT.text('Comment RLOG', lang) ||
+              '''; document.RASDC_TEST.submit(); this.disabled = true; ">
+
+<INPUT  class="SUBMIT" type="button" value="' ||
+              RASDI_TRNSLT.text('UNComment RLOG', lang) ||
+              '" onclick=" document.getElementById(''ACTION'').value=''' ||
+              RASDI_TRNSLT.text('UNComment RLOG', lang) ||
+              '''; document.RASDC_TEST.submit(); this.disabled = true; ">
+              
 ');
 end if;
 htp.p('
@@ -526,6 +552,33 @@ htp.p('
     if 1 = 2 then
       null;
     elsif ACTION = GBUTTONSRC then
+      pselect;
+      poutput;
+    elsif ACTION = RASDI_TRNSLT.text('Comment RLOG', lang) then
+      for r in (
+      select t.plsql, t.rowid rid from rasd_triggers t where t.formid = PFORMID
+      and instr(t.plsql , 'rlog(') > 0
+      ) loop
+      
+        update rasd_triggers x set x.plsql = replace(x.plsql, 'rlog(','--rlog(')
+        where rowid = r.rid and  x.formid = PFORMID;     
+        
+        sporocilo := RASDI_TRNSLT.text('In triggers where rlog is, it is commented to --rlog.', lang);
+      end loop;
+      
+      pselect;
+      poutput;
+    elsif ACTION = RASDI_TRNSLT.text('UNComment RLOG', lang) then
+      for r in (
+      select t.plsql, t.rowid rid from rasd_triggers t where t.formid = PFORMID
+      and instr(t.plsql , '--rlog(') > 0
+      ) loop
+      
+        update rasd_triggers x set x.plsql = replace(x.plsql, '--rlog(','rlog(')
+        where rowid = r.rid and  x.formid = PFORMID;     
+        
+        sporocilo := RASDI_TRNSLT.text('In triggers where commented --rlog is, it is uncommented to rlog.', lang);
+      end loop;
       pselect;
       poutput;
     elsif ACTION =  RASDI_TRNSLT.text('Compile', lang) or  ACTION =  RASDI_TRNSLT.text('Debug', lang) then
@@ -595,7 +648,7 @@ htp.p('
     end if;
 
 
-    if ACTION is null or ACTION not in (GBUTTONSRC, RASDI_TRNSLT.text('Compile', lang), RASDI_TRNSLT.text('Debug', lang)) then
+    if ACTION is null or ACTION not in ( RASDI_TRNSLT.text('UNComment RLOG', lang), RASDI_TRNSLT.text('Comment RLOG', lang), GBUTTONSRC, RASDI_TRNSLT.text('Compile', lang), RASDI_TRNSLT.text('Debug', lang)) then
 
       pselect;
       poutput;
@@ -619,4 +672,3 @@ htp.p('
   end;
 end RASDC_TEST;
 /
-

@@ -48,11 +48,13 @@ create or replace package body RASDC_BLOCKSONFORM is
   type dtab is table of date index by binary_integer;
   type ctab is table of varchar2(4000) index by binary_integer;
   type itab is table of pls_integer index by binary_integer;
+  type ltab is table of clob index by binary_integer;
 
   function version(p_log out varchar2) return varchar2 is
   begin
 
     p_log := '/* Change LOG:
+20210303 - Changes because change type of SQLTEXT
 20200928 - Added Push 2 GIT (program shoud not have errors)    
 20200410 - Added new compilation message     
 20190617 - Added Form searcher    
@@ -68,7 +70,7 @@ create or replace package body RASDC_BLOCKSONFORM is
 20150814 - Added superuser
 20141027 - Added footer on all pages
 */';
-    return 'v.1.1.20200928225530';
+    return 'v.1.1.20210303225530';
 
   end;
 
@@ -97,7 +99,7 @@ b10AUTOCREATEBATCHYN    ctab;
     B10LHTML3      ctab;
     B10LPROZILCI   ctab;
     B10LPOLJA      ctab;
-    B20sqltext     ctab;
+    B20sqltext     ltab;
     B20source      ctab;
     B20RID         rtab;
     B20RS          ctab;
@@ -938,7 +940,7 @@ end;
                  label,
                  vrstnired,
                  rform
-            from (SELECT distinct b.sqltext,
+            from (SELECT distinct to_char(substr(b.sqltext,1,1)) sqltext,
                                   b.ROWID RID,
                                   b.formid,
                                   b.blockid,
@@ -968,7 +970,7 @@ select blockid from rasd_blocks where upper(blockid||':'||sqltable||':'||sqltext
                      and (b.blockid in 
 (select a.blockid from rasd_pages a where a.page = to_number(ppages) and formid = pformid )    or ppages is null )                 
 
-                   group by b.sqltext,
+                   group by to_char(substr(b.sqltext,1,1)),
                             b.ROWID,
                             b.formid,
                             b.blockid,
@@ -1073,6 +1075,7 @@ select blockid from rasd_blocks where upper(blockid||':'||sqltable||':'||sqltext
             i__ := i__ + 1;
           end if;
         END LOOP;
+        
         if c__%rowcount < 1 then
           B20sqltext.delete(1);
           B20source.delete(1);

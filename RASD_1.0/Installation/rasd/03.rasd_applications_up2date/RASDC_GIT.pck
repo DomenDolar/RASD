@@ -20,7 +20,7 @@ create or replace package RASDC_GIT is
   */
   function version(p_log out varchar2) return varchar2;
   function getGitLocation return varchar2;
-  procedure push2git(message varchar2, gttkn varchar2, frmcode varchar2);
+  procedure push2git(message varchar2, gttkn varchar2, frmcode varchar2, fformid number);
 
   procedure Program(name_array in owa.vc_arr, value_array in owa.vc_arr);
 end;
@@ -55,9 +55,12 @@ create or replace package body RASDC_GIT is
   function version(p_log out varchar2) return varchar2 is
   begin
     p_log := '/* Change LOG:
+20210204 - Added condition readFileFromGit for Jenkinsfile
+20201125 - Added VERSION in Jenkinsfile file to GIT        
+20201014 - Added run.txt file to GIT    
 20200926 - First version (XML not implemented yet - privs problem
 */';
-    return 'v.1.1.20200926225530';
+    return 'v.1.1.20210204225530';
 
   end;
 
@@ -70,9 +73,11 @@ exception when others then
     return '';
 end;      
 
-  procedure push2git(message varchar2, gttkn varchar2, frmcode varchar2) is 
+  procedure push2git(message varchar2, gttkn varchar2, frmcode varchar2, fformid number) is 
     v varchar2(32000);
     s varchar2(32000);
+    version varchar2(100);
+    Jenkinsfile varchar2(2000);
   begin
 
    OWA_UTIL.mime_header('application/json', FALSE, 'UTF-8'); 
@@ -80,6 +85,20 @@ end;
 --  HTP.p('Content-Disposition: filename="dwnld_'||file||'"');
    OWA_UTIL.http_header_close;
    
+   begin
+   select c.engineid||'.'||f.version||'.'||to_char(sysdate,'yyyymmddhh24miss')||decode(c.compileyn,'Y','','-SNAPSHOT') into version
+   from rasd_forms_compiled c , rasd_forms f
+   where c.formid = fformid and c.editor = rasdi_client.secGetUsername
+   and f.formid = c.formid;
+   exception when others then
+     version :=  '0.0.'||to_char(sysdate,'yyyymmddhh24miss')||'-SNAPSHOT';
+   end;
+   
+   
+   
+   Jenkinsfile := '@Library(''''jenkins_pipeline_libs'''') _
+Jenkinsfile_dbProject (schema: ''''UR'||substr(upper(frmcode),1,4)||''''', scmRepository: '''''||dd_plsql2gitlab.p_gitlab_url||'/'||substr(lower(frmcode),1,4)||'/'||frmcode||''''')';
+  
 --    EXECUTE IMMEDIATE 'begin    
 --    :1 := dd_plsql2gitlab.sendPackage2Git( :2, :3 , :4 ,:5, :6 , :7);    
 --    end;'
@@ -87,12 +106,17 @@ end;
  --   using frmcode, rasdi_client.secGetUsername, rasdi_client.secGetUsername,rasdi_client.secGetUsername, message , gttkn;
     s := 'declare v varchar2(32000); x clob := ''1''; begin begin    
     v := dd_plsql2gitlab.sendPackage2Git( '''||frmcode||''', '''||substr(lower(frmcode),1,4)||''', '''||user||''' , '''||rasdi_client.secGetUsername||''' ,'''||rasdi_client.secGetUsername||''', '''||message||''' , '''||gttkn||''');    
+    v := v || dd_plsql2gitlab.sendCustom2Git( '''||frmcode||''', '''||substr(lower(frmcode),1,4)||''', '''||frmcode||'.sql'' , ''src/main/'', ''run.txt'' , '''||rasdi_client.secGetUsername||''' ,'''||rasdi_client.secGetUsername||''', '''||message||''' , '''||gttkn||''');    
+    v := v || dd_plsql2gitlab.sendCustom2Git( '''||frmcode||''', '''||substr(lower(frmcode),1,4)||''', '''||version||''' , ''/'', ''VERSION'' , '''||rasdi_client.secGetUsername||''' ,'''||rasdi_client.secGetUsername||''', '''||message||''' , '''||gttkn||''');    
+    if nvl(instr( dd_plsql2gitlab.readFileFromGit( '''||frmcode||''', '''||substr(lower(frmcode),1,4)||''', ''/'', ''Jenkinsfile'' , '''||gttkn||''' ) , ''Jenkinsfile''),0) = 0 then     
+      v := v || dd_plsql2gitlab.sendCustom2Git( '''||frmcode||''', '''||substr(lower(frmcode),1,4)||''', '''||Jenkinsfile||''' , ''/'', ''Jenkinsfile'' , '''||rasdi_client.secGetUsername||''' ,'''||rasdi_client.secGetUsername||''', '''||message||''' , '''||gttkn||''');    
+    end if;    
     --x := '||user||'.'||frmcode||'.metadata;  -- privileges problem have to find solution !!!
     --v := v || dd_plsql2gitlab.sendCustom2Git( '''||frmcode||''', '''||substr(lower(frmcode),1,4)||''', x , ''src/main/'','''||frmcode||'.xml'', '''||rasdi_client.secGetUsername||''' ,'''||rasdi_client.secGetUsername||''', '''||message||''' , '''||gttkn||''');    
     exception when others then v := sqlerrm||'' (schema: '||user||' , RASD user: '||rasdi_client.secGetUsername||' ) Error stack:''||DBMS_UTILITY.FORMAT_ERROR_STACK; end;
     :v := v;   
    end;';
-    EXECUTE IMMEDIATE s using out v;
+   EXECUTE IMMEDIATE s using out v;
 /*
 begin    
     v := dd_plsql2gitlab.sendPackage2Git( frmcode, rasdi_client.secGetUsername , rasdi_client.secGetUsername ,rasdi_client.secGetUsername, message , gttkn);    
@@ -379,7 +403,7 @@ htp.p('</TD> </TR> </TABLE>
           //PUSH
           s.innerHTML = ''Sending to GIT ...'';
           $(''#rasdSpinner'').show();
-  $.getJSON( ''RASDC_GIT.push2git?message=''+m.value+''&gttkn=''+lsgttkn+''&frmcode='||B10rform(1)||''' )
+  $.getJSON( ''RASDC_GIT.push2git?message=''+m.value+''&gttkn=''+lsgttkn+''&frmcode='||B10rform(1)||'&fformid='||PFORMID||''' )
    .always(function( data ) {
        s.innerHTML = JSON.stringify(data);
        $(''#rasdSpinner'').hide();   

@@ -21,12 +21,11 @@ create or replace package RASDC_SQL is
   function version(p_log out varchar2) return varchar2;
 
   function get_sqltext(PFORMID  RASD_FORMS.formid%type,
-                       pblockid RASD_BLOCKS.blockid%type) return varchar2;
+                       pblockid RASD_BLOCKS.blockid%type) return clob;
 
   procedure Program(name_array in owa.vc_arr, value_array in owa.vc_arr);
 end;
 /
-
 create or replace package body RASDC_SQL is
   /*
   // +----------------------------------------------------------------------+
@@ -53,27 +52,29 @@ create or replace package body RASDC_SQL is
   type dtab is table of date index by binary_integer;
   type ctab is table of varchar2(32000) index by binary_integer;
   type itab is table of pls_integer index by binary_integer;
+  type ltab is table of clob index by binary_integer;
 
   function version(p_log out varchar2) return varchar2 is
   begin
     p_log := '/* Change LOG:
-20160627 - Included reference form future.     
-20160310 - Included CodeMirror     
-20150928 - Fixed issues on SQL compiler    
-20150921 - Fixed bug in SQL checker    
-20150814 - Added superuser     
-20141028 - Solved problem when string of table name was in dad username 
+20210303 - Changes because change type of SQLTEXT     
+20160627 - Included reference form future.
+20160310 - Included CodeMirror
+20150928 - Fixed issues on SQL compiler
+20150921 - Fixed bug in SQL checker
+20150814 - Added superuser
+20141028 - Solved problem when string of table name was in dad username
 */';
-    return 'v.1.1.20160627225530';
+    return 'v.1.1.20210303225530';
 
   end;
 
 
   function get_sqltext(PFORMID  RASD_FORMS.formid%type,
-                       pblockid RASD_BLOCKS.blockid%type) return varchar2 is
+                       pblockid RASD_BLOCKS.blockid%type) return clob is
 
     v_sqltable RASD_BLOCKS.sqltable%type;
-    v_sqltext  varchar(32000);
+    v_sqltext  clob;
 
     function create_variables(PFORMID  number,
                            pblockid varchar2) return varchar2 is
@@ -90,7 +91,7 @@ create or replace package body RASDC_SQL is
                      from RASD_FIELDS p
                     where p.formid = PFORMID
                     order by dolzina desc) loop
-                    
+
           if rp.type = 'N' then
             v_plsql := v_plsql||' '||rp.nameid||' number := 1;
 ';
@@ -165,12 +166,12 @@ create or replace package body RASDC_SQL is
        AND formid = PFORMID;
     if instr(upper(ltrim(v_sqltext)), 'SELECT') = 1 then
 
-     
+
       for r in (select t.table_name x
                   from all_tables t
                  where t.owner = rasdc_library.currentDADUser
                  order by table_name desc) loop
-               
+
         v_sqltext := replace(upper(v_sqltext),
                              ' ' || r.x ||' ',
                              ' ' || rasdc_library.currentDADUser || '.' || r.x || ' ');
@@ -185,11 +186,11 @@ create or replace package body RASDC_SQL is
                              ',' || rasdc_library.currentDADUser || '.' || r.x|| ',');
       end loop;
 
-      v_sqltext := 'declare 
+      v_sqltext := 'declare
  ci1__ number;
-'||create_variables(PFORMID, pblockid)||' begin 
+'||create_variables(PFORMID, pblockid)||' begin
 select count(1) into ci1__ from ('||replace(replace(upper(v_sqltext), '(1)', ''), '(I__)', '')||');
-end;';      
+end;';
 
       return v_sqltext;
     elsif instr(upper(ltrim(v_sqltext)), 'FROM') = 1 then
@@ -210,32 +211,32 @@ end;';
                              ' ' || rasdc_library.currentDADUser || '.' || r.x || ',');
         v_sqltext := replace(upper(v_sqltext),
                              ',' || r.x ||',',
-                             ',' || rasdc_library.currentDADUser || '.' || r.x|| ',');               
-                                       
+                             ',' || rasdc_library.currentDADUser || '.' || r.x|| ',');
+
       end loop;
 
-      v_sqltext := 'declare 
+      v_sqltext := 'declare
  ci1__ number;
-'||create_variables(PFORMID, pblockid)||' begin 
+'||create_variables(PFORMID, pblockid)||' begin
 select count(1) into ci1__ from ('||replace(replace(upper(v_sqltext), '(1)', ''), '(I__)', '')||');
-end;';      
+end;';
       return v_sqltext;
     else
       if instr(v_sqltable,'.') > 0 then
       v_sqltext := 'SELECT ' || get_select || ' FROM ' ||
                    v_sqltable || ' ' ||
                    v_sqltext;
-      else  
+      else
       v_sqltext := 'SELECT ' || get_select || ' FROM ' ||
                    rasdc_library.currentDADUser || '.' || v_sqltable || ' ' ||
                    v_sqltext;
-      end if;             
-      
-      v_sqltext := 'declare 
+      end if;
+
+      v_sqltext := 'declare
  ci1__ number;
-'||create_variables(PFORMID, pblockid)||' begin 
+'||create_variables(PFORMID, pblockid)||' begin
 select count(1) into ci1__ from ('||replace(replace(upper(v_sqltext), '(1)', ''), '(I__)', '')||');
-end;';            
+end;';
       return v_sqltext;
     end if;
   end;
@@ -251,7 +252,7 @@ end;';
     SPOROCILO  varchar2(32500);
     B10RS      ctab;
     B10rid     rtab;
-    B10sqltext ctab;
+    B10sqltext ltab;
     B10source  ctab;
     B10rform   ctab;
 
@@ -539,7 +540,7 @@ htp.prn('">
               '" style="FONT-SIZE: 8pt; font-face: Lucida Console;');
               htp.prn('" rows="10" cols="60">' ||
               B10sqltext(1) || '</TEXTAREA> </TD> </TR> </TABLE>
-              
+
  <script>
 window.onload = function() {
   var mime = ''text/x-sql'';
@@ -576,38 +577,38 @@ window.onload = function() {
                    union
                    select distinct owner||'.'||table_name id,
                           owner||'.'||table_name  /*|| ' ... ' || substr(type, 1, 1)*/ label, 2 x, x.owner
-                   from dba_tab_privs x 
-                   where --type in ('TABLE', 'VIEW') and 
-                    grantee = rasdc_library.currentDADUser 
-                    and 1=2 
+                   from dba_tab_privs x
+                   where --type in ('TABLE', 'VIEW') and
+                    grantee = rasdc_library.currentDADUser
+                    and 1=2
                    order by 3, 1
                   ) loop
-htp.p('      '||r__.id||': {');  
+htp.p('      '||r__.id||': {');
           for r1 in (select * from all_tab_columns t where t.table_name = r__.id and t.owner = r__.owner) loop
-htp.p(r1.column_name||' :{}, ');            
-          end loop;  
+htp.p(r1.column_name||' :{}, ');
+          end loop;
           htp.p('null :{} },');
       end loop;
-htp.p('      
+htp.p('
       __RASD_VARIABLES: {},
-');      
+');
 for r in (  SELECT blockid, fieldid, blockid||fieldid polje
             FROM RASD_FIELDS
            where formid = PFORMID
            order by nvl(blockid,'.'), fieldid) loop
-htp.p('      '||r.polje||': {},');          
+htp.p('      '||r.polje||': {},');
 end loop;
 htp.p('
-      __OTHER_FUNCTIONS: {}      
+      __OTHER_FUNCTIONS: {}
     }}
   });
   window.editor.setSize("100%","180");
 };
 </script>
-             
-              
-              
-              
+
+
+
+
 <table width="100%" border="0"><tr>
 ');
       if sporocilo is not null then
@@ -616,7 +617,7 @@ htp.p('
                 RASDI_TRNSLT.text('Message', lang) ||
                 ': </FONT></td>
 <td class="sporocilom">' ||
-               RASDI_TRNSLT.text( substr(sporocilo,1,1000), lang) || 
+               RASDI_TRNSLT.text( substr(sporocilo,1,1000), lang) ||
                 '</td>');
       end if;
       htp.prn('
@@ -637,7 +638,7 @@ htp.p('
  izpis_dna('''||rasdi_client.c_registerto||''');
 </SCRIPT> </BODY> </HTML>
     ');
-  
+
     exception
       when others then
         htp.p('<font color="red">' ||
@@ -666,7 +667,7 @@ htp.p('
     declare
       vup    varchar2(30) := rasdi_client.secGetUsername;
       v_form varchar2(100);
-    begin
+    begin      
       rasdi_client.secCheckPermission('RASDC_SQL', '');
       psubmit;
       RASDC_LIBRARY.checkprivileges(PFORMID);
@@ -679,18 +680,18 @@ htp.p('
         declare
           c0 number := 0;
         begin
-          
+
           execute immediate get_sqltext(PFORMID, pblockid);
-          
+
         exception
           when no_data_found then
             null;
           when others then
             sporocilo := sqlerrm || '</BR>' ;
         end;
-        
+
         phtml;
-        
+
       elsif action = RASDI_TRNSLT.text('Search', lang) then
         pselect;
         phtml;
@@ -716,4 +717,3 @@ htp.p('
   end;
 end RASDC_SQL;
 /
-

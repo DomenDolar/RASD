@@ -33,6 +33,7 @@ create or replace package rasd_engine11 is
   
   c_action     rasd_fields.fieldid%type := 'ACTION';  
   c_restrestype rasd_fields.fieldid%type := 'RESTRESTYPE'; 
+  c_restrequest rasd_fields.fieldid%type := 'RESTREQUEST'; 
   c_fin        rasd_fields.fieldid%type := 'FIN'; -- field name for returninga parameters
   c_session_max_val_long        number := 512; 
 /*  
@@ -140,6 +141,20 @@ GBUTTONCLR -- clear button action
                   'L',
                   'cctab'
                   ) types,
+           decode(upper(type),
+                  'N',
+                  'number',
+                  'C',
+                  'varchar2(4000)',
+                  'D',
+                  'date',
+                  'T',
+                  'timestamp',
+                  'R',
+                  'rowid',
+                  'L',
+                  'clob'
+                  ) types1,
            blockid || fieldid || '(i__)' fieldi,
            nameid nameid
       from rasd_fields p
@@ -160,7 +175,7 @@ GBUTTONCLR -- clear button action
            b.rowidyn,
            b.pagingyn,
            b.clearyn,
-           b.sqltext,
+          -- b.sqltext,
            b.label,
            min(p.orderby) orderby
       from rasd_blocks b, rasd_fields p
@@ -178,7 +193,7 @@ GBUTTONCLR -- clear button action
               b.rowidyn,
               b.pagingyn,
               b.clearyn,
-              b.sqltext,
+            --  b.sqltext,
               b.label
      order by orderby, b.blockid;
   
@@ -210,7 +225,6 @@ GBUTTONCLR -- clear button action
 
 end;
 /
-
 create or replace package body rasd_engine11 is
 /*
 // +----------------------------------------------------------------------+
@@ -236,6 +250,12 @@ create or replace package body rasd_engine11 is
 function version(p_log out varchar2) return varchar2 is
   begin
    p_log := '/* Change LOG: 
+20210303 Changes because change type of SQLTEXT   
+20210130 Added utf-8 into json or xml response
+20201022 Added PRE_SELECT and POST_SELECT triggers on FORM level   
+20201022 Added added function poutputrest(can be used for storing revision print)   
+20201015 Added on_readrest and when prepearing JSON or XML response element name is UI field(nameid)  instead of blockid||fieldid   
+20201014 Added application/json or text/xml header to RASD REST services   
 20200421 Added condition or trueDelete(rf.formid, rb.blockid) to set record status ''U''  Line 4400   
 20200302 Soleved bug 31, changes on line 4658 and on JS function initRowStatus
 20200211 SQL length from BLOCK SQL set to larger than 4000 chars, Line 562
@@ -267,7 +287,7 @@ function version(p_log out varchar2) return varchar2 is
 20180530 Added suport for PRE_UI POST_UI BLOCK triggers on engine version 11   
 20180525 New version 11. Blocks output is created in procedures output_<BLOCK>_DIV    
 */';
-   return 'v.'||c_engversion||'.0.20200211225530'; 
+   return 'v.'||c_engversion||'.0.20210303225530'; 
    
   end;
 
@@ -697,7 +717,7 @@ function version(p_log out varchar2) return varchar2 is
         if i = 0 then
             addcnl('rlog( ''START trigger ' || pblockid ||' '|| ptriggerid ||' '');');
         else
-          if instr(pdefault, 'i__') = 0 then
+          if instr(pdefault, 'i__') = 0 or pblockid is null then
             addcnl('rlog( ''START trigger ' || pblockid ||' '|| ptriggerid ||' '');');
           else   
             addcnl('rlog( ''START trigger ' || pblockid ||' '|| ptriggerid ||' record=''||i__||'' '');');
@@ -773,9 +793,9 @@ order by decode(t.lobid,null,2,1)
   end;  
 
   function getSQLText(pformid  rasd_forms.formid%type,
-                      pblockid rasd_blocks.blockid%type) return varchar2 is
+                      pblockid rasd_blocks.blockid%type) return clob is
     v_sqltable rasd_blocks.sqltable%type;
-    v_sqltext  varchar2(32000); --rasd_blocks.sqltext%type;
+    v_sqltext  clob; --rasd_blocks.sqltext%type;
   
     function getSelect return varchar2 is
       v_fields rasd_blocks.sqltext%type;
@@ -2511,7 +2531,7 @@ function checkMandatoryFields() {
    
    addcnl('    htp.p(''  try { for (j__ = 1; j__ <= '||owa_util.ite( rb.numrows=0 , 9999,rb.numrows)||'; j__++) { '');');
 
-   -- preveri insertnnyn Äe ta del izvede
+   -- preveri insertnnyn èe ta del izvede
     i := 0;
     for rp in c_fieldsOfBlock(pformid, rb.blockid) loop
     if    nvl(rp.elementyn, c_false) = c_true 
@@ -2779,7 +2799,7 @@ function checkMandatoryFields() {
            
         addcnl('  end loop;');
         
-        addcnl('    if v_call <> ''PLSQL'' then ');
+        addcnl('    if v_call not in (''PLSQL'',''REST'') then ');
         addcnl('      on_session;              ');
         addcnl('    end if;                   ');
         
@@ -2953,6 +2973,9 @@ where f.formid = pformid
 
         addcnl('if '||c_restrestype||' = ''XML'' then ');
 
+        addcnl('    OWA_UTIL.mime_header(''text/xml'', FALSE);');
+        addcnl('    OWA_UTIL.http_header_close;	');     
+
         addcnl(' htp.p(''<?xml version="1.0" encoding="UTF-8"?>'||c_nl||'<openLOV LOV="''||p_lov||''" filter="''||p_id||''">'');      ');
         addcnl(' htp.p(''<result>'');');
         addcnl(' for i in 1..v_counter loop');
@@ -2961,6 +2984,9 @@ where f.formid = pformid
         addcnl(' htp.p(''</result></openLOV>'');');
 
         addcnl('else ');
+
+        addcnl('    OWA_UTIL.mime_header(''application/json'', FALSE);');
+        addcnl('    OWA_UTIL.http_header_close;	');     
 
         addcnl(' htp.p(''{"openLOV":{"@LOV":"''||p_lov||''","@filter":"''||p_id||''",'' );      ');
         addcnl(' htp.p(''"result":['');');
@@ -3301,6 +3327,7 @@ end if;
 
       addcnl('  log__ clob := '''';');
       addcnl('  set_session_block__ clob := '''';');
+      addcnl('  '||c_restrequest||' clob := '''';');            
 
       addcnl('  TYPE LOVrec__ IS RECORD (label varchar2(4000),id varchar2(4000) );');
       addcnl('  TYPE LOVtab__ IS TABLE OF LOVrec__ INDEX BY BINARY_INTEGER;');
@@ -3370,7 +3397,9 @@ end if;
                     order by triggerid) loop
         addcnl(rpro.plsql);
        end loop;*/
-
+if rf.autocreaterestyn = 'Y' then      
+      addcnl('  function poutputrest return clob;');
+end if;
       addcnl('     procedure htpClob(v_clob clob) is');
       addcnl('        i number := 0;');
       addcnl('        v clob := v_clob;');       
@@ -3515,7 +3544,7 @@ end if;
               addcnl('rlog(''START <b>on_session</b>'');');
         end if;
       
-         addcnl('  if ACTION is not null then ');        
+         addcnl('  if '||c_action||' is not null then ');        
 
       addcnl('set_session_block__ := set_session_block__ || ''begin '';');
      
@@ -3541,7 +3570,7 @@ end if;
            and v_sess_yn = 1
         then  
         if trueField(rf.formid , 'GBUTTONCLR') then  
-         addcnl('  if ACTION = GBUTTONCLR then '); 
+         addcnl('  if '||c_action||' = GBUTTONCLR then '); 
 
          addcnl('set_session_block__ := set_session_block__ || '''||re.library ||'.sessionSetValue('''''||rp.nameid||''''', '''''''' ); '';');
 
@@ -3598,7 +3627,7 @@ end if;
 
           
         if trueField(rf.formid , 'GBUTTONCLR') then  
-         addcnl('  if ACTION = GBUTTONCLR then '); 
+         addcnl('  if '||c_action||' = GBUTTONCLR then '); 
 
          addcnl('set_session_block__ := set_session_block__ || '''||re.library ||'.sessionSetValue('''''||rp.nameid||''''', '''''''' ); '';');
 
@@ -3726,6 +3755,82 @@ end if;
       
       addcnl('  end;');
 
+      /***************************************************************************************/
+      /*****************************    READREST    ********************************************/
+      /***************************************************************************************/
+if rf.autocreaterestyn = 'Y' then
+      addcnl('  procedure on_readrest is');
+        addcnl('    i__ pls_integer := 1;');
+      addcnl('  begin');
+
+        if c_debug then
+              addcnl('rlog(''START <b>on_readrest</b>'');');
+        end if;  
+-- reading formfields ...
+   
+              addcnl('for r__  in (select * from json_table( '||c_restrequest||' , ''$.form.formfields'' COLUMNS(');
+              addcnl('   x__ varchar2(1) PATH ''$.X__''');              
+for rpf in c_fieldsOfForm(rf.formid) loop
+           if rpf.elementyn = c_true and rpf.element not in ('FONT_') then
+              addcnl('  ,'||rpf.blockid||rpf.fieldid||' '||rpf.types||' PATH ''$.'||lower(rpf.nameid)||'''' );  
+           end if;   
+end loop;
+              addcnl(')) jt ) loop');
+
+for rpf in c_fieldsOfForm(rf.formid) loop
+           if rpf.elementyn = c_true and rpf.element not in ('FONT_') then
+              addcnl(' if instr('||c_restrequest||','''||lower(rpf.nameid)||''') > 0 then '||rpf.blockid||rpf.fieldid||' := r__.'||rpf.blockid||rpf.fieldid||'; end if;' );  
+           end if;   
+end loop;
+              addcnl('end loop;');
+
+-- reading blocks
+for rb in c_blocks(rf.formid) loop
+              addcnl('i__ := 1;');
+              addc('for r__  in (select * from json_table( '||c_restrequest||' , ''$.form.'||lower(rb.blockid));
+              if nvl(rb.numrows,1) = 1  and nvl(rb.emptyrows,0) = 0 then null;
+              else
+                addc('[*]');
+              end if;
+              addc(''' COLUMNS(');
+              addcnl('   x__ varchar2(1) PATH ''$.'||lower(c_rs)||'''');              
+for rpb in c_fieldsOfBlock(rf.formid, rb.blockid) loop
+           if rpb.elementyn = c_true and rpb.element not in ('FONT_') then
+           
+              addcnl('  ,'||rpb.blockid||rpb.fieldid||' '||owa_util.ite( (rpb.types1='rowid'),'varchar2(4000)', rpb.types1)||' PATH ''$.'||lower(rpb.nameid)||'''' );  
+           end if;   
+end loop;
+              addcnl(')) jt ) loop');
+
+if rb.dbblockyn = c_true then
+       if nvl(rb.numrows,1) = 1  and nvl(rb.emptyrows,0) = 0 then null;
+       else
+         addcnl('if r__.x__ is not null then');
+       end if;
+end if;
+
+for rpb in c_fieldsOfBlock(rf.formid, rb.blockid) loop
+            if rpb.elementyn = c_true and rpb.element not in ('FONT_') then
+              addcnl(' if instr('||c_restrequest||','''||lower(rpb.nameid)||''') > 0 then '||rpb.fieldi||' := r__.'||rpb.blockid||rpb.fieldid||'; end if;' );  
+           end if;   
+end loop;
+              addcnl('i__ := i__ + 1;');
+if rb.dbblockyn = c_true then
+       if nvl(rb.numrows,1) = 1  and nvl(rb.emptyrows,0) = 0 then null;
+       else
+         addcnl('end if;');
+       end if;
+end if;              
+              addcnl('end loop;');
+
+end loop;              
+
+        if c_debug then
+              addcnl('rlog(''END on_readrest<br/>'');');
+        end if;
+       addcnl('  end;');
+
+end if;
 
       /***************************************************************************************/
       /*****************************    SUBMIT    ********************************************/
@@ -3747,6 +3852,7 @@ end if;
       
       addcnl('      if 1 = 2 then null;');
       addcnl('      elsif  upper(name_array(i__)) = '''||c_restrestype||''' then '||c_restrestype||' := value_array(i__);');
+      addcnl('      elsif  upper(name_array(i__)) = '''||c_restrequest||''' then '||c_restrequest||' := value_array(i__);');
       for rpf in c_fieldsOfForm(rf.formid) loop
         addcnl('      elsif  upper(name_array(i__)) = upper(''' ||
                rpf.nameid || ''') then ' || rpf.fieldi || ' := ');
@@ -4336,6 +4442,20 @@ end if;
 
       addcnl('  end;');
      
+if rf.autocreaterestyn = 'Y' then
+      addcnl('  procedure psubmitrest(name_array  in owa.vc_arr, value_array in owa.vc_arr) is');
+      addcnl('  begin');
+            
+      if trueTrigger(rf.formid, 'ON_SUBMIT') then
+        createTriggerPLSQL(rf.formid, 'ON_SUBMIT' , '' , createTriggerTemplatePLSQL(rf.formid, 'ON_SUBMIT' , '' ,'-- Reading post variables into fields.'||c_nl||'    on_submit(name_array ,value_array); on_readrest;'));
+      else
+        addcnl(createTriggerTemplatePLSQL(rf.formid, 'ON_SUBMIT' , '' ,'-- Reading post variables into fields.'||c_nl||'    on_submit(name_array ,value_array); on_readrest;'));
+      end if;
+      addcnl('    post_submit;');
+
+      addcnl('  end;');
+end if;
+
       /***************************************************************************************/
       /*****************************   CLEAR_XX     *************+***************************/
       /***************************************************************************************/
@@ -4706,6 +4826,13 @@ end if;
       /***************************************************************************************/
       addcnl('  procedure pselect is');
       addcnl('  begin');
+
+      if trueTrigger(rf.formid, 'pre_select', '') then
+        createTriggerPLSQL(rf.formid, 'pre_select', '',createTriggerTemplatePLSQL(rf.formid, 'pre_select', '',''));
+      else
+        addcnl(createTriggerTemplatePLSQL(rf.formid, 'pre_select', '',''));
+      end if;           
+
       for rb in c_blocks(rf.formid) loop
         if nvl(rb.dbblockyn, 'N') = c_true then
           addcnl('    if ' || truePageSet(rf.formid, rb.blockid) || ' then ');
@@ -4713,6 +4840,12 @@ end if;
           addcnl('    end if;');
         end if;
       end loop;
+
+      if trueTrigger(rf.formid, 'post_select', '') then
+        createTriggerPLSQL(rf.formid, 'post_select', '',createTriggerTemplatePLSQL(rf.formid, 'post_select', '',''));
+      else
+        addcnl(createTriggerTemplatePLSQL(rf.formid, 'post_select', '',''));
+      end if;           
 
       addcnl('  null;');
       
@@ -5215,8 +5348,14 @@ end if;
       /*****************************    OUTPUTREST   *************+***************************/
       /***************************************************************************************/
 if rf.autocreaterestyn = 'Y' then      
-      addcnl('  procedure poutputrest is');
+      addcnl('  function poutputrest return clob is');
       addcnl('    v_firstrow__ boolean;');
+      addcnl('    v_clob__ clob;');
+
+      addcnl('    procedure htpp(v_str varchar2) is ');
+      addcnl('    begin');
+      addcnl('      v_clob__ := v_clob__ || v_str;');
+      addcnl('    end;');
 
       addcnl('    function escapeRest(v_str varchar2) return varchar2 is ');
       addcnl('    begin');
@@ -5253,26 +5392,27 @@ if rf.autocreaterestyn = 'Y' then
 
 
      addcnl('if '||c_restrestype||' = ''XML'' then' );
-     
-          addcnl('    htp.p(''<?xml version="1.0" encoding="UTF-8"?>''); ');
-          addcnl('    htp.p(''<form name="'||rf.form||'" version="'||rf.version||'">''); ');
-          addcnl('    htp.p(''<formfields>''); ');
+   
+        
+          addcnl('    htpp(''<?xml version="1.0" encoding="UTF-8"?>''); ');
+          addcnl('    htpp(''<form name="'||rf.form||'" version="''||version||''">''); ');
+          addcnl('    htpp(''<formfields>''); ');
           for rp in c_fieldsOfForm(rf.formid) loop
           if nvl(rp.elementyn,c_false) = c_true then
           if rp.type in ('C','L') then 
-          addcnl('    htp.p(''<'||lower(rp.fieldid)||'><![CDATA[''||'||rp.fieldid||'||'']]></'||lower(rp.fieldid)||'>''); ');
+          addcnl('    htpp(''<'||lower(rp.nameid)||'><![CDATA[''||'||rp.fieldid||'||'']]></'||lower(rp.nameid)||'>''); ');
           else           
-          addcnl('    htp.p(''<'||lower(rp.fieldid)||'>''||'||rp.fieldid||'||''</'||lower(rp.fieldid)||'>''); ');
+          addcnl('    htpp(''<'||lower(rp.nameid)||'>''||'||rp.fieldid||'||''</'||lower(rp.nameid)||'>''); ');
           end if;
           end if;
           end loop;
-          addcnl('    htp.p(''</formfields>''); ');
+          addcnl('    htpp(''</formfields>''); ');
 
       for rb in c_blocks(rf.formid) loop
         
           addcnl('    if ShowBlock'||lower(rb.blockid)||'_DIV then ');
       
-          addcnl('    htp.p(''<'||lower(rb.blockid)||'>''); ');
+          addcnl('    htpp(''<'||lower(rb.blockid)||'>''); ');
        if nvl(rb.dbblockyn, c_false) = c_true or rb.numrows != 1 then
           addcnl('  for i__ in 1..');
           
@@ -5309,63 +5449,63 @@ if rf.autocreaterestyn = 'Y' then
            end;          
          
           addcnl('.count loop ');
-          addcnl('    htp.p(''<element>''); ');             
+          addcnl('    htpp(''<element>''); ');             
           for rp in c_fieldsOfBlock(rf.formid, rb.blockid) loop
           if nvl(rp.elementyn,c_false) = c_true then  
           if rp.type in ('C','L') then 
-          addcnl('    htp.p(''<'||lower(rp.blockid||rp.fieldid)||'><![CDATA[''||'||rp.blockid||rp.fieldid||'(i__)||'']]></'||lower(rp.blockid||rp.fieldid)||'>''); ');
+          addcnl('    htpp(''<'||lower(rp.nameid)||'><![CDATA[''||'||rp.blockid||rp.fieldid||'(i__)||'']]></'||lower(rp.nameid)||'>''); ');
           else
-          addcnl('    htp.p(''<'||lower(rp.blockid||rp.fieldid)||'>''||'||rp.blockid||rp.fieldid||'(i__)||''</'||lower(rp.blockid||rp.fieldid)||'>''); ');
+          addcnl('    htpp(''<'||lower(rp.nameid)||'>''||'||rp.blockid||rp.fieldid||'(i__)||''</'||lower(rp.nameid)||'>''); ');
           end if;
           end if;
           end loop;
-          addcnl('    htp.p(''</element>''); ');             
+          addcnl('    htpp(''</element>''); ');             
           addcnl('  end loop; ');
        else
-          addcnl('    htp.p(''<element>''); ');             
+          addcnl('    htpp(''<element>''); ');             
           for rp in c_fieldsOfBlock(rf.formid, rb.blockid) loop
           if nvl(rp.elementyn,c_false) = c_true then  
           if rp.type in ('C','L') then             
-          addcnl('    htp.p(''<'||lower(rp.blockid||rp.fieldid)||'><![CDATA[''||'||rp.blockid||rp.fieldid||'(1)||'']]></'||lower(rp.blockid||rp.fieldid)||'>''); ');
+          addcnl('    htpp(''<'||lower(rp.nameid)||'><![CDATA[''||'||rp.blockid||rp.fieldid||'(1)||'']]></'||lower(rp.nameid)||'>''); ');
           else
-          addcnl('    htp.p(''<'||lower(rp.blockid||rp.fieldid)||'>''||'||rp.blockid||rp.fieldid||'(1)||''</'||lower(rp.blockid||rp.fieldid)||'>''); ');
+          addcnl('    htpp(''<'||lower(rp.nameid)||'>''||'||rp.blockid||rp.fieldid||'(1)||''</'||lower(rp.nameid)||'>''); ');
           end if;
           end if;
           end loop;
-          addcnl('    htp.p(''</element>''); ');                     
+          addcnl('    htpp(''</element>''); ');                     
        end if;   
-          addcnl('  htp.p(''</'||lower(rb.blockid)||'>''); ');
+          addcnl('  htpp(''</'||lower(rb.blockid)||'>''); ');
           addcnl('  end if; ');
       end loop;
-          addcnl('    htp.p(''</form>''); ');
+          addcnl('    htpp(''</form>''); ');
                     
-     addcnl('else' );
-                 
-          addcnl('    htp.p(''{"form":{"@name":"'||rf.form||'","@version":"'||rf.version||'",'' ); ');
-          addcnl('    htp.p(''"formfields": {''); ');
+     addcnl('else' );  
+         
+          addcnl('    htpp(''{"form":{"@name":"'||rf.form||'","@version":"''||version||''",'' ); ');
+          addcnl('    htpp(''"formfields": {''); ');
           
           v_firstrow := true;
           for rp in c_fieldsOfForm(rf.formid) loop
           if v_firstrow then  
             if nvl(rp.elementyn,c_false) = c_true then
             if rp.type in ('C','L') then
-            addcnl('    htp.p(''"'||lower(rp.fieldid)||'":"''||escapeRest('||rp.fieldid||')||''"''); '); 
+            addcnl('    htpp(''"'||lower(rp.nameid)||'":"''||escapeRest('||rp.fieldid||')||''"''); '); 
             else   
-            addcnl('    htp.p(''"'||lower(rp.fieldid)||'":"''||'||rp.fieldid||'||''"''); '); 
+            addcnl('    htpp(''"'||lower(rp.nameid)||'":"''||'||rp.fieldid||'||''"''); '); 
             end if;            
             v_firstrow := false;
             end if;
           else
             if nvl(rp.elementyn,c_false) = c_true then            
             if rp.type in ('C','L') then
-            addcnl('    htp.p('',"'||lower(rp.fieldid)||'":"''||escapeRest('||rp.fieldid||')||''"''); ');            
+            addcnl('    htpp('',"'||lower(rp.nameid)||'":"''||escapeRest('||rp.fieldid||')||''"''); ');            
             else  
-            addcnl('    htp.p('',"'||lower(rp.fieldid)||'":"''||'||rp.fieldid||'||''"''); ');            
+            addcnl('    htpp('',"'||lower(rp.nameid)||'":"''||'||rp.fieldid||'||''"''); ');            
             end if;
             end if;
           end if;
           end loop;
-          addcnl('    htp.p(''},''); '); --
+          addcnl('    htpp(''},''); '); --
 
           v_firstrow := true;
       for rb in c_blocks(rf.formid) loop
@@ -5373,10 +5513,10 @@ if rf.autocreaterestyn = 'Y' then
           addcnl('    if ShowBlock'||lower(rb.blockid)||'_DIV then ');
         
           if v_firstrow then   
-            addcnl('    htp.p(''"'||lower(rb.blockid)||'":[''); ');
+            addcnl('    htpp(''"'||lower(rb.blockid)||'":[''); ');
 --            v_firstrow := false;
           else
-            addcnl('    htp.p('',"'||lower(rb.blockid)||'":[''); ');
+            addcnl('    htpp('',"'||lower(rb.blockid)||'":[''); ');
           end if;          
           
           if nvl(rb.dbblockyn, c_false) = c_true or rb.numrows != 1 then
@@ -5417,10 +5557,10 @@ if rf.autocreaterestyn = 'Y' then
           
           addcnl('.count loop ');
           addcnl('    if v_firstrow__ then');
-          addcnl('     htp.p(''{''); ');
+          addcnl('     htpp(''{''); ');
           addcnl('     v_firstrow__ := false;');
           addcnl('    else');
-          addcnl('     htp.p('',{''); ');
+          addcnl('     htpp('',{''); ');
           addcnl('    end if;');
           declare
            v_f boolean := true;
@@ -5430,30 +5570,30 @@ if rf.autocreaterestyn = 'Y' then
           if v_f then
           if nvl(rp.elementyn,c_false) = c_true then     
           if rp.type in ('C','L') then            
-          addcnl('    htp.p(''"'||lower(rp.blockid||rp.fieldid)||'":"''||escapeRest('||rp.blockid||rp.fieldid||'(i__))||''"''); '); 
+          addcnl('    htpp(''"'||lower(rp.nameid)||'":"''||escapeRest('||rp.blockid||rp.fieldid||'(i__))||''"''); '); 
           else
-          addcnl('    htp.p(''"'||lower(rp.blockid||rp.fieldid)||'":"''||'||rp.blockid||rp.fieldid||'(i__)||''"''); '); 
+          addcnl('    htpp(''"'||lower(rp.nameid)||'":"''||'||rp.blockid||rp.fieldid||'(i__)||''"''); '); 
           end if;
           v_f := false;
           end if;
           else
           if nvl(rp.elementyn,c_false) = c_true then  
           if rp.type in ('C','L') then            
-          addcnl('    htp.p('',"'||lower(rp.blockid||rp.fieldid)||'":"''||escapeRest('||rp.blockid||rp.fieldid||'(i__))||''"''); ');           
+          addcnl('    htpp('',"'||lower(rp.nameid)||'":"''||escapeRest('||rp.blockid||rp.fieldid||'(i__))||''"''); ');           
           else
-          addcnl('    htp.p('',"'||lower(rp.blockid||rp.fieldid)||'":"''||'||rp.blockid||rp.fieldid||'(i__)||''"''); ');           
+          addcnl('    htpp('',"'||lower(rp.nameid)||'":"''||'||rp.blockid||rp.fieldid||'(i__)||''"''); ');           
           end if;
           end if;
           end if;
  
           end loop;
           end;
-          addcnl('    htp.p(''}''); ');
+          addcnl('    htpp(''}''); ');
           addcnl('  end loop; ');
          
           else
             
-          addcnl('     htp.p(''{''); ');
+          addcnl('     htpp(''{''); ');
           declare
            v_f boolean := true;
           begin
@@ -5462,46 +5602,58 @@ if rf.autocreaterestyn = 'Y' then
           if v_f then   
           if nvl(rp.elementyn,c_false) = c_true then  
           if rp.type in ('C','L') then 
-          addcnl('    htp.p(''"'||lower(rp.blockid||rp.fieldid)||'":"''||escapeRest('||rp.blockid||rp.fieldid||'(1))||''"''); '); 
+          addcnl('    htpp(''"'||lower(rp.nameid)||'":"''||escapeRest('||rp.blockid||rp.fieldid||'(1))||''"''); '); 
           else
-          addcnl('    htp.p(''"'||lower(rp.blockid||rp.fieldid)||'":"''||'||rp.blockid||rp.fieldid||'(1)||''"''); '); 
+          addcnl('    htpp(''"'||lower(rp.nameid)||'":"''||'||rp.blockid||rp.fieldid||'(1)||''"''); '); 
           end if;
           v_f := false;
           end if;
           else
           if nvl(rp.elementyn,c_false) = c_true then  
           if rp.type in ('C','L') then 
-          addcnl('    htp.p('',"'||lower(rp.blockid||rp.fieldid)||'":"''||escapeRest('||rp.blockid||rp.fieldid||'(1))||''"''); ');           
+          addcnl('    htpp('',"'||lower(rp.nameid)||'":"''||escapeRest('||rp.blockid||rp.fieldid||'(1))||''"''); ');           
           else
-          addcnl('    htp.p('',"'||lower(rp.blockid||rp.fieldid)||'":"''||'||rp.blockid||rp.fieldid||'(1)||''"''); ');           
+          addcnl('    htpp('',"'||lower(rp.nameid)||'":"''||'||rp.blockid||rp.fieldid||'(1)||''"''); ');           
           end if;
           end if;
           end if;
  
           end loop;
           end;
-          addcnl('    htp.p(''}''); ');
+          addcnl('    htpp(''}''); ');
           
           end if;
           
-          addcnl('    htp.p('']''); '); 
+          addcnl('    htpp('']''); '); 
  
          addcnl('  else ');
          
           if v_firstrow then   
-            addcnl('    htp.p(''"'||lower(rb.blockid)||'":[]''); ');
+            addcnl('    htpp(''"'||lower(rb.blockid)||'":[]''); ');
             v_firstrow := false;
           else
-            addcnl('    htp.p('',"'||lower(rb.blockid)||'":[]''); ');
+            addcnl('    htpp('',"'||lower(rb.blockid)||'":[]''); ');
           end if;
                    
          addcnl('  end if; ');
       end loop;
-          addcnl('    htp.p(''}}''); ');
+          addcnl('    htpp(''}}''); ');
 
      addcnl('end if;' );
-          
-     addcnl('  null; end;');
+     addcnl('return v_clob__;' );          
+     addcnl('null; end;');
+     
+     addcnl('procedure poutputrest is');
+     addcnl('begin');  
+     addcnl('if '||c_restrestype||' = ''XML'' then' );
+     addcnl('    OWA_UTIL.mime_header(''text/xml'', FALSE,''utf-8'');');
+     addcnl('    OWA_UTIL.http_header_close;	');     
+     addcnl('else' );      
+     addcnl('    OWA_UTIL.mime_header(''application/json'', FALSE ,''utf-8'');');
+     addcnl('    OWA_UTIL.http_header_close;	');     
+     addcnl('end if;' );  
+     addcnl('htpclob(poutputrest);');     
+     addcnl('end;');     
 end if;
 
       /***************************************************************************************/
@@ -5894,6 +6046,7 @@ if rf.autocreaterestyn = 'Y' then
       addcnl('begin  ');
 
 --      addcnl('  rasd_client.secCheckCredentials(  name_array , value_array ); ');
+
         tt := '';
         
         if c_debug then
@@ -5914,7 +6067,7 @@ if rf.autocreaterestyn = 'Y' then
               
       if trueField(rf.formid, c_action) then
         tt := '  -- The program execution sequence based on  ' || c_action || ' defined.' || c_nl;
-        tt := tt || '  psubmit(name_array ,value_array);' || c_nl;
+        tt := tt || '  psubmitrest(name_array ,value_array);' || c_nl;
         tt := tt || '  rasd_client.secCheckPermission('''||rf.form||''',' || c_action || ');  '|| c_nl;
         tt := tt || '  if ' || c_action || ' is null then null;' || c_nl;
 
@@ -6086,20 +6239,26 @@ if rf.autocreaterestyn = 'Y' then
 
       tt :=  tt ||'if '||c_restrestype||' = ''XML'' then' || c_nl;
    
+      tt :=  tt ||'    OWA_UTIL.mime_header(''text/xml'', FALSE,''utf-8'');'|| c_nl;
+      tt :=  tt ||'    OWA_UTIL.http_header_close;	'|| c_nl;     
+
       tt :=  tt ||'    htp.p(''<?xml version="1.0" encoding="UTF-8"?>'|| c_nl||
-                              '<form name="'||rf.form||'" version="'||rf.version||'">''); ';
+                              '<form name="'||rf.form||'" version="''||version||''">''); ';
       tt :=  tt ||'    htp.p(''<error>''); ';
       tt :=  tt ||'    htp.p(''  <errorcode>''||sqlcode||''</errorcode>''); ';
-      tt :=  tt ||'    htp.p(''  <errormessage>''||sqlerrm||''</errormessage>''); ';
+      tt :=  tt ||'    htp.p(''  <errormessage>''||replace(sqlerrm,''<'',''&lt;'')||''</errormessage>''); ';
       tt :=  tt ||'    htp.p(''</error>''); ';
       tt :=  tt ||'    htp.p(''</form>''); ';
   
       tt :=  tt ||'else' || c_nl;
-  
-      tt :=  tt ||'    htp.p(''{"form":{"@name":"'||rf.form||'","@version":"'||rf.version||'",'' ); ';
+      
+      tt :=  tt ||'    OWA_UTIL.mime_header(''application/json'', FALSE,''utf-8'');'|| c_nl;
+      tt :=  tt ||'    OWA_UTIL.http_header_close;	'|| c_nl;
+
+      tt :=  tt ||'    htp.p(''{"form":{"@name":"'||rf.form||'","@version":"''||version||''",'' ); ';
       tt :=  tt ||'    htp.p(''"error":{''); ';
       tt :=  tt ||'    htp.p(''  "errorcode":"''||sqlcode||''",''); ';
-      tt :=  tt ||'    htp.p(''  "errormessage":"''||sqlerrm||''"''); ';
+      tt :=  tt ||'    htp.p(''  "errormessage":"''||replace(sqlerrm,''"'',''\"'')||''"''); ';
       tt :=  tt ||'    htp.p(''}''); ';
       tt :=  tt ||'    htp.p(''}}''); ';
 
@@ -6376,7 +6535,7 @@ addcnl('  v_clob clob := '''';');
 addcnl('  v_vc cctab;');
 addcnl('  begin');
 
-addcnl('  owa_util.mime_header(''application/xml'', FALSE);');
+addcnl('  owa_util.mime_header(''text/xml'', FALSE);');
 addcnl('  HTP.p(''Content-Disposition: filename="Export_'||rf.form||'_v.'||c_engversion||'.'||rf.version||'.'||to_char(sysdate,'yyyymmddhh24miss')||'.xml"'');');
 addcnl('  owa_util.http_header_close;');
 addcnl('  htp.p(''<?xml version="1.0" encoding="UTF-8" ?>'');');
@@ -6411,4 +6570,3 @@ addcnl('  end;');
   
 end;
 /
-

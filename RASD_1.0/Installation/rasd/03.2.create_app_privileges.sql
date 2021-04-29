@@ -27,6 +27,7 @@ drop public synonym RASDC_UPLOAD ;
 drop public synonym rasdc_share ;
 drop public synonym rasdc_stats ;
 drop public synonym rasdc_execution ;
+drop public synonym RASDC_WELCOME ;
 create public synonym rasdc_attributes for rasd.rasdc_attributes;
 create public synonym rasdc_blocksonform for rasd.rasdc_blocksonform;
 create public synonym rasdc_cssjs for rasd.rasdc_cssjs;
@@ -50,6 +51,7 @@ create public synonym rasdc_share for rasd.rasdc_share;
 create public synonym rasdc_stats for rasd.rasdc_stats; 
 create public synonym rasdc_execution for rasd.rasdc_execution; 
 create public synonym RASDC_GIT for RASD.RASDC_GIT;
+create public synonym RASDC_WELCOME for rasd.rasdc_welcome;
 grant execute on rasd.rasdc_attributes to public;
 grant execute on rasd.rasdc_blocksonform to public;
 grant execute on rasd.rasdc_cssjs to public;
@@ -73,6 +75,8 @@ grant execute on rasd.rasdc_share to public;
 grant execute on rasd.rasdc_stats to public;
 grant execute on rasd.rasdc_execution to public;
 grant execute on rasd.RASDC_GIT to public;
+grant execute on RASDC_WELCOME to public;
+
 
 prompt
 prompt Privileges added
